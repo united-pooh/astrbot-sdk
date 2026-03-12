@@ -33,7 +33,7 @@ class VirtualStar(ABC):
         ...
 
     @abstractmethod
-    async def handshake(self) -> StarMetadata:
+    async def handshake(self) -> dict[str, StarMetadata]:
         """Perform handshake to retrieve plugin metadata.
 
         This method should:
@@ -42,7 +42,7 @@ class VirtualStar(ABC):
         - Validate the plugin's compatibility
 
         Returns:
-            StarMetadata: Complete plugin metadata including handlers
+            dict[str, StarMetadata]: Mapping of star_name to metadata (without handlers)
 
         Raises:
             RuntimeError: If handshake fails or times out

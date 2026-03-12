@@ -1,5 +1,7 @@
 # OS files
 .DS_Store
+Thumbs.db
+Desktop.ini
 
 # Python bytecode and caches
 __pycache__/
@@ -31,8 +33,20 @@ plugins/.venv/
 
 # Tool caches
 .uv-cache/
+.astrbot-worker-state.json
+tmp/
+bench*.json
+
+# Local docs / notes
+文档/
+
+# Environment files
+.env
+.env.*
+!.env.example
 
 # IDE files
 .idea/
 .vscode/
 *.iml
+*.code-workspace

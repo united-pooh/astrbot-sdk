@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import locale
 import json
 import os
 import subprocess
+from concurrent.futures import ThreadPoolExecutor
 from typing import IO, Any
 
 from loguru import logger
@@ -19,6 +21,8 @@ from .base import JSONRPCClient
 
 class StdioClient(JSONRPCClient):
     """JSON-RPC client using standard input/output for communication."""
+
+    _fallback_executor: ThreadPoolExecutor | None = None
 
     def __init__(
         self,
@@ -36,11 +40,45 @@ class StdioClient(JSONRPCClient):
         self._command = command
         self._cwd = cwd
         self._env = env or os.environ.copy()
-        self._process: subprocess.Popen | None = None
-        self._stdin: IO[Any] | None = None
-        self._stdout: IO[Any] | None = None
+        self._process: asyncio.subprocess.Process | subprocess.Popen[str] | None = None
+        self._stdin: IO[str] | None = None
+        self._stdout: IO[str] | None = None
+        self._stdin_writer: asyncio.StreamWriter | None = None
+        self._stdout_reader: asyncio.StreamReader | None = None
+        self._stderr_reader: asyncio.StreamReader | None = None
         self._read_task: asyncio.Task | None = None
+        self._stderr_task: asyncio.Task | None = None
         self._write_lock = asyncio.Lock()
+        self._fallback_encoding = locale.getpreferredencoding(False)
+
+    @classmethod
+    def _get_fallback_executor(cls) -> ThreadPoolExecutor:
+        if cls._fallback_executor is None:
+            env_override = os.environ.get("ASTRBOT_STDIO_EXECUTOR_MAX_WORKERS")
+            if env_override:
+                try:
+                    max_workers = max(4, int(env_override))
+                except ValueError:
+                    logger.warning(
+                        "Invalid ASTRBOT_STDIO_EXECUTOR_MAX_WORKERS value. "
+                        f"Expected int, got: {env_override!r}"
+                    )
+                    max_workers = 0
+            else:
+                max_workers = 0
+
+            if max_workers <= 0:
+                cpu_count = os.cpu_count() or 1
+                # Each client uses long-lived blocking reads (stdout + stderr) when
+                # subprocess APIs are unavailable (e.g. selector loop on Windows).
+                # Use a larger pool than asyncio's default to avoid deadlocks.
+                max_workers = max(32, cpu_count * 8)
+
+            cls._fallback_executor = ThreadPoolExecutor(
+                max_workers=max_workers,
+                thread_name_prefix="astrbot-stdio",
+            )
+        return cls._fallback_executor
 
     async def start(self) -> None:
         """Start the client and launch subprocess."""
@@ -61,46 +99,98 @@ class StdioClient(JSONRPCClient):
         logger.info(f"Starting subprocess: {' '.join(self._command)}")
 
         try:
-            self._process = subprocess.Popen(
-                self._command,
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+            self._process = await asyncio.create_subprocess_exec(
+                *self._command,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
                 cwd=self._cwd,
                 env=self._env,
-                text=True,
-                bufsize=1,  # Line buffered
             )
-
-            # Use subprocess's stdio
-            self._stdin = self._process.stdout  # Read from subprocess stdout
-            self._stdout = self._process.stdin  # Write to subprocess stdin
-
-            logger.info(f"Subprocess started with PID {self._process.pid}")
-
-            # Start monitoring stderr
-            asyncio.create_task(self._monitor_stderr())
-
-        except Exception as e:
-            logger.error(f"Failed to start subprocess: {e}")
+        except asyncio.CancelledError:
             raise
+        except Exception as exc:
+            logger.debug(
+                "asyncio subprocess transport failed "
+                f"({exc.__class__.__name__}: {exc}); "
+                "falling back to thread-based stdio transport."
+            )
+        else:
+            assert self._process.stdout is not None
+            assert self._process.stderr is not None
+            assert self._process.stdin is not None
 
-    async def _monitor_stderr(self) -> None:
-        """Monitor subprocess stderr and log output."""
-        if not self._process or not self._process.stderr:
+            self._stdout_reader = self._process.stdout
+            self._stderr_reader = self._process.stderr
+            self._stdin_writer = self._process.stdin
+            logger.info(f"Subprocess started with PID {self._process.pid}")
+            self._stderr_task = asyncio.create_task(self._monitor_stderr_asyncio())
+            return
+
+        self._process = subprocess.Popen(
+            self._command,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            cwd=self._cwd,
+            env=self._env,
+            text=True,
+            bufsize=1,  # Line buffered
+        )
+
+        # Use subprocess's stdio
+        self._stdin = self._process.stdout  # Read from subprocess stdout
+        self._stdout = self._process.stdin  # Write to subprocess stdin
+
+        logger.info(f"Subprocess started with PID {self._process.pid}")
+
+        # Start monitoring stderr
+        self._stderr_task = asyncio.create_task(self._monitor_stderr_threaded())
+
+    def _decode_stdout_line(self, data: bytes) -> str:
+        try:
+            return data.decode("utf-8")
+        except UnicodeDecodeError:
+            try:
+                return data.decode(self._fallback_encoding)
+            except UnicodeDecodeError:
+                return data.decode("utf-8", errors="replace")
+
+    async def _monitor_stderr_asyncio(self) -> None:
+        if self._stderr_reader is None:
+            return
+        try:
+            while self._running:
+                line = await self._stderr_reader.readline()
+                if not line:
+                    break
+                text = self._decode_stdout_line(line).strip()
+                if text:
+                    logger.debug(f"[Subprocess stderr] {text}")
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.error(f"Error monitoring stderr: {exc}")
+
+    async def _monitor_stderr_threaded(self) -> None:
+        if not isinstance(self._process, subprocess.Popen) or self._process.stderr is None:
             return
 
         loop = asyncio.get_event_loop()
+        executor = self._get_fallback_executor()
 
         try:
             while self._running and self._process.poll() is None:
-                line = await loop.run_in_executor(None, self._process.stderr.readline)
-                if line:
-                    logger.debug(f"[Subprocess stderr] {line.strip()}")
-                else:
+                line = await loop.run_in_executor(executor, self._process.stderr.readline)
+                if not line:
                     break
-        except Exception as e:
-            logger.error(f"Error monitoring stderr: {e}")
+                line = line.strip()
+                if line:
+                    logger.debug(f"[Subprocess stderr] {line}")
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.error(f"Error monitoring stderr: {exc}")
 
     async def stop(self) -> None:
         """Stop the client and terminate subprocess if running."""
@@ -118,8 +208,41 @@ class StdioClient(JSONRPCClient):
                 pass
             self._read_task = None
 
+        if self._stderr_task:
+            self._stderr_task.cancel()
+            try:
+                await self._stderr_task
+            except asyncio.CancelledError:
+                pass
+            self._stderr_task = None
+
         # Terminate subprocess if running
-        if self._process:
+        if isinstance(self._process, asyncio.subprocess.Process):
+            if self._stdin_writer is not None:
+                try:
+                    self._stdin_writer.close()
+                    await self._stdin_writer.wait_closed()
+                except Exception:
+                    logger.debug("Failed to close subprocess stdin cleanly")
+            logger.info("Terminating subprocess...")
+            self._process.terminate()
+            try:
+                await asyncio.wait_for(self._process.wait(), timeout=5.0)
+                logger.info("Subprocess terminated gracefully")
+            except TimeoutError:
+                logger.warning("Subprocess did not terminate, killing...")
+                self._process.kill()
+                await self._process.wait()
+                logger.info("Subprocess killed")
+            finally:
+                self._process = None
+                self._stdin_writer = None
+                self._stdout_reader = None
+                self._stderr_reader = None
+                self._stdin = None
+                self._stdout = None
+
+        if isinstance(self._process, subprocess.Popen):
             if self._stdout:
                 try:
                     self._stdout.close()
@@ -127,16 +250,20 @@ class StdioClient(JSONRPCClient):
                     logger.debug("Failed to close subprocess stdin cleanly")
             logger.info("Terminating subprocess...")
             self._process.terminate()
+            loop = asyncio.get_event_loop()
+            executor = self._get_fallback_executor()
             try:
-                self._process.wait(timeout=5.0)
+                await loop.run_in_executor(executor, self._process.wait, 5.0)
                 logger.info("Subprocess terminated gracefully")
             except subprocess.TimeoutExpired:
                 logger.warning("Subprocess did not terminate, killing...")
                 self._process.kill()
-                self._process.wait()
+                await loop.run_in_executor(executor, self._process.wait)
                 logger.info("Subprocess killed")
-
-            self._process = None
+            finally:
+                self._process = None
+                self._stdin = None
+                self._stdout = None
 
         logger.info("StdioClient stopped")
 
@@ -148,10 +275,15 @@ class StdioClient(JSONRPCClient):
         """
         async with self._write_lock:
             try:
-                json_str = message.model_dump_json(exclude_none=True)
-                await asyncio.get_event_loop().run_in_executor(
-                    None, self._write_line, json_str
+                json_str = message.model_dump_json(
+                    exclude_none=True,
+                    ensure_ascii=True,
                 )
+                if self._stdin_writer is not None:
+                    self._stdin_writer.write((json_str + "\n").encode("utf-8"))
+                    await self._stdin_writer.drain()
+                else:
+                    self._write_line(json_str)
             except Exception as e:
                 logger.error(f"Failed to send message: {e}")
                 raise
@@ -163,21 +295,60 @@ class StdioClient(JSONRPCClient):
             self._stdout.flush()
 
     async def _read_loop(self) -> None:
-        """Main loop to read messages from stdin."""
-        if not self._stdin:
+        """Main loop to read messages from subprocess stdout."""
+        if self._stdout_reader is not None:
+            await self._read_loop_asyncio()
+            return
+        await self._read_loop_threaded()
+
+    async def _read_loop_asyncio(self) -> None:
+        if self._stdout_reader is None:
+            logger.error("No stdout reader available for reading")
+            return
+
+        logger.debug("Started reading from stdin")
+
+        try:
+            while self._running:
+                line = await self._stdout_reader.readline()
+                if not line:
+                    logger.info("EOF reached on stdin")
+                    break
+
+                text = self._decode_stdout_line(line).strip()
+                if not text:
+                    continue
+
+                try:
+                    message = self._parse_message(text)
+                    await self._handle_message(message)
+                except Exception as exc:
+                    logger.error(
+                        f"Failed to parse message: {exc}, raw line: {text}"
+                    )
+
+        except asyncio.CancelledError:
+            logger.debug("Read loop cancelled")
+            raise
+        except Exception as exc:
+            logger.error(f"Error in read loop: {exc}")
+        finally:
+            logger.debug("Stopped reading from stdin")
+
+    async def _read_loop_threaded(self) -> None:
+        if self._stdin is None:
             logger.error("No stdin available for reading")
             return
 
         logger.debug("Started reading from stdin")
         loop = asyncio.get_event_loop()
+        executor = self._get_fallback_executor()
 
         try:
             while self._running:
-                # Read line from stdin in executor to avoid blocking
-                line = await loop.run_in_executor(None, self._stdin.readline)
+                line = await loop.run_in_executor(executor, self._stdin.readline)
 
                 if not line:
-                    # EOF reached
                     logger.info("EOF reached on stdin")
                     break
 
@@ -186,17 +357,18 @@ class StdioClient(JSONRPCClient):
                     continue
 
                 try:
-                    # Parse JSON-RPC message
                     message = self._parse_message(line)
                     await self._handle_message(message)
-                except Exception as e:
-                    logger.error(f"Failed to parse message: {e}, raw line: {line}")
+                except Exception as exc:
+                    logger.error(
+                        f"Failed to parse message: {exc}, raw line: {line}"
+                    )
 
         except asyncio.CancelledError:
             logger.debug("Read loop cancelled")
             raise
-        except Exception as e:
-            logger.error(f"Error in read loop: {e}")
+        except Exception as exc:
+            logger.error(f"Error in read loop: {exc}")
         finally:
             logger.debug("Stopped reading from stdin")
 

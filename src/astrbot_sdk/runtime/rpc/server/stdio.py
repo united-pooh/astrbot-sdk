@@ -77,7 +77,10 @@ class StdioServer(JSONRPCServer):
         """
         async with self._write_lock:
             try:
-                json_str = message.model_dump_json(exclude_none=True)
+                json_str = message.model_dump_json(
+                    exclude_none=True,
+                    ensure_ascii=True,
+                )
                 await asyncio.get_event_loop().run_in_executor(
                     None, self._write_line, json_str
                 )

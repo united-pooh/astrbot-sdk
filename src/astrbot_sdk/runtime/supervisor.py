@@ -459,7 +459,15 @@ class SupervisorRuntime:
                 await worker.start()
             except Exception as exc:
                 self.skipped_plugins[plugin.name] = str(exc)
-                logger.error(f"Failed to start worker for {plugin.name}: {exc}")
+                exc_message = str(exc)
+                exc_summary = (
+                    f"{exc.__class__.__name__}: {exc_message}"
+                    if exc_message
+                    else exc.__class__.__name__
+                )
+                logger.error(
+                    f"Failed to start worker for {plugin.name}: {exc_summary}"
+                )
                 await worker.stop()
                 continue
 

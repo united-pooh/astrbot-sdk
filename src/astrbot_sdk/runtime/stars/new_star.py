@@ -190,8 +190,11 @@ class NewStdioStar(NewStar):
             python_executable: Python executable to use (defaults to 'python')
             context: Context instance for managing managers and their functions
         """
-        if not os.path.exists(plugins_dir):
-            raise FileNotFoundError(f"Plugins directory not found: {plugins_dir}")
+        plugins_dir_path = str(Path(plugins_dir).resolve())
+        if not os.path.exists(plugins_dir_path):
+            raise FileNotFoundError(
+                f"Plugins directory not found: {plugins_dir_path}"
+            )
 
         repo_src_dir = str(Path(__file__).resolve().parents[3])
         env = os.environ.copy()
@@ -208,11 +211,11 @@ class NewStdioStar(NewStar):
             "astrbot_sdk",
             "run",
             "--plugins-dir",
-            plugins_dir,
+            plugins_dir_path,
         ]
 
         # Create StdioClient with subprocess management
-        client = StdioClient(command=command, cwd=plugins_dir, env=env)
+        client = StdioClient(command=command, cwd=plugins_dir_path, env=env)
         super().__init__(client, context=context)
 
 
