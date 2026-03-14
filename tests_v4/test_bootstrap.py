@@ -185,6 +185,22 @@ class TestPrepareStdioTransport:
         # Restore
         sys.stdout = original_stdout
 
+    def test_binary_mode_uses_stdio_buffers(self):
+        original_stdout = sys.stdout
+
+        try:
+            in_stream, out_stream, original = _prepare_stdio_transport(
+                None,
+                None,
+                binary=True,
+            )
+
+            assert in_stream is sys.stdin.buffer
+            assert out_stream is original_stdout.buffer
+            assert original is original_stdout
+        finally:
+            sys.stdout = original_stdout
+
 
 class TestWaitForShutdown:
     """Tests for _wait_for_shutdown function."""

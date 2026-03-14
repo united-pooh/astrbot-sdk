@@ -35,6 +35,7 @@ AstrBot SDK v4 当前同时承担两件事：
 
 协议与传输
   ├─ protocol.messages / protocol.descriptors
+  ├─ protocol.wire_codecs
   ├─ Peer
   └─ StdioTransport / WebSocket transports
 ```
@@ -80,12 +81,13 @@ src-new/
 │   │   ├── __init__.py              # 仅导出原生 v4 协议模型
 │   │   ├── descriptors.py           # handlers / capabilities / builtin schema registry
 │   │   ├── messages.py              # initialize / invoke / result / event / cancel
+│   │   ├── wire_codecs.py           # JSON / msgpack wire codec
 │   │   └── legacy_adapter.py        # v3 JSON-RPC ↔ v4 适配
 │   │
 │   ├── runtime/
 │   │   ├── __init__.py              # Peer / Transport / CapabilityRouter / HandlerDispatcher
 │   │   ├── peer.py
-│   │   ├── transport.py
+│   │   ├── transport.py             # framed transport bytes / text frames
 │   │   ├── capability_router.py
 │   │   ├── handler_dispatcher.py
 │   │   ├── loader.py
@@ -172,6 +174,20 @@ src-new/
 
 `InitializeMessage` 由 `Peer.initialize()` 发起，成功响应是  
 `ResultMessage(kind="initialize_result", success=True, output=InitializeOutput(...))`。
+
+### 5.4 Wire codec 与 framing
+
+- 协议语义模型仍由 `protocol.messages` 定义；wire 编解码由 `protocol.wire_codecs` 承担。
+- 当前内建 codec：`json`、`msgpack`。
+- `json` 仍是默认 wire codec，便于调试与兼容。
+- `msgpack` 作为显式可选 wire codec，可用于 supervisor/worker 和 websocket worker。
+- `StdioTransport` 的 framing 由 codec 决定：
+  - `json` -> line-delimited text
+  - `msgpack` -> length-prefixed binary
+- WebSocket frame 类型同样由 codec 决定：
+  - `json` -> text frame
+  - `msgpack` -> binary frame
+- codec 需要在建连前显式确定；当前不通过 `initialize` 再协商 codec。
 
 ## 6. 当前内建 capabilities
 
@@ -283,6 +299,7 @@ from astrbot.core.utils.session_waiter import session_waiter
 
 - CLI：
   - `astr dev --local` / `astrbot-sdk dev --local`
+  - `astr run --wire-codec {json,msgpack}`
   - `astrbot-sdk init`
   - `astrbot-sdk validate`
   - `astrbot-sdk build`

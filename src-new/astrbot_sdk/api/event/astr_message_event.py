@@ -236,9 +236,7 @@ class AstrMessageEvent(MessageEvent):
         # platform name from the raw payload if it is a dict; otherwise, fall
         # back to an empty string.
         if isinstance(self.raw, dict):
-            return str(
-                self.raw.get("platform_name") or self.raw.get("platform") or ""
-            )
+            return str(self.raw.get("platform_name") or self.raw.get("platform") or "")
         return ""
 
     def get_platform_id(self) -> str:
@@ -249,9 +247,7 @@ class AstrMessageEvent(MessageEvent):
         if self.platform_meta is not None:
             return self.platform_meta.id
         if isinstance(self.raw, dict):
-            platform_from_raw = (
-                self.raw.get("platform_id") or self.raw.get("platform")
-            )
+            platform_from_raw = self.raw.get("platform_id") or self.raw.get("platform")
             if platform_from_raw:
                 return str(platform_from_raw)
         if getattr(self, "platform", None) is not None:
