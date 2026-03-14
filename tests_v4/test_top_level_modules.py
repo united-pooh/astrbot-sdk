@@ -187,9 +187,18 @@ class TestCliModule:
                 {"plugins_dir": Path("plugins-dev")},
             ),
             (
-                ["run", "--plugins-dir", "plugins-dev", "--wire-codec", "msgpack"],
+                [
+                    "run",
+                    "--plugins-dir",
+                    "plugins-dev",
+                    "--worker-wire-codec",
+                    "msgpack",
+                ],
                 "run_supervisor",
-                {"plugins_dir": Path("plugins-dev"), "wire_codec": "msgpack"},
+                {
+                    "plugins_dir": Path("plugins-dev"),
+                    "worker_wire_codec": "msgpack",
+                },
             ),
             (
                 ["worker", "--plugin-dir", "plugins/demo"],

@@ -181,6 +181,7 @@ src-new/
 - 当前内建 codec：`json`、`msgpack`。
 - `json` 仍是默认 wire codec，便于调试与兼容。
 - `msgpack` 作为显式可选 wire codec，可用于 supervisor/worker 和 websocket worker。
+- core 到 supervisor 的上游 stdio 链路当前仍固定为 JSON；可配置 codec 仅作用于 worker 链路和 websocket worker。
 - `StdioTransport` 的 framing 由 codec 决定：
   - `json` -> line-delimited text
   - `msgpack` -> length-prefixed binary
@@ -299,7 +300,7 @@ from astrbot.core.utils.session_waiter import session_waiter
 
 - CLI：
   - `astr dev --local` / `astrbot-sdk dev --local`
-  - `astr run --wire-codec {json,msgpack}`
+  - `astr run --worker-wire-codec {json,msgpack}`
   - `astrbot-sdk init`
   - `astrbot-sdk validate`
   - `astrbot-sdk build`
