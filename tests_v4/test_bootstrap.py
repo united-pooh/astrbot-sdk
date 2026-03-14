@@ -7,7 +7,7 @@ from __future__ import annotations
 import asyncio
 import sys
 import tempfile
-from io import StringIO
+from io import BytesIO, StringIO
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -42,6 +42,7 @@ from astrbot_sdk.runtime.bootstrap import (
 from astrbot_sdk.runtime.capability_router import CapabilityRouter
 from astrbot_sdk.runtime.loader import LoadedHandler, PluginSpec
 from astrbot_sdk.runtime.peer import Peer
+from astrbot_sdk.runtime.transport import StdioTransport
 
 from tests_v4.helpers import FakeEnvManager, MemoryTransport, make_transport_pair
 
@@ -200,6 +201,25 @@ class TestPrepareStdioTransport:
             assert original is original_stdout
         finally:
             sys.stdout = original_stdout
+
+    @pytest.mark.asyncio
+    async def test_length_prefixed_stdio_transport_defaults_to_binary_stdio_buffers(
+        self,
+    ):
+        stdin_buffer = BytesIO()
+        stdout_buffer = BytesIO()
+        fake_stdin = SimpleNamespace(buffer=stdin_buffer)
+        fake_stdout = SimpleNamespace(buffer=stdout_buffer)
+        transport = StdioTransport(framing="length_prefixed")
+
+        with (
+            patch.object(sys, "stdin", fake_stdin),
+            patch.object(sys, "stdout", fake_stdout),
+        ):
+            await transport.start()
+            assert transport._stdin is stdin_buffer
+            assert transport._stdout is stdout_buffer
+            await transport.stop()
 
 
 class TestWaitForShutdown:
