@@ -6,7 +6,6 @@ import unittest
 from pathlib import Path
 
 from astrbot_sdk.protocol.messages import InitializeOutput, PeerInfo
-from astrbot_sdk.protocol.wire_codecs import MsgpackProtocolCodec
 from astrbot_sdk.runtime.bootstrap import SupervisorRuntime
 from astrbot_sdk.runtime.peer import Peer
 
@@ -88,34 +87,23 @@ class RuntimeIntegrationTest(unittest.IsolatedAsyncioTestCase):
             plugin_root = plugins_root / "v4_plugin"
             copy_sample_plugin("new", plugin_root)
 
-            codec = MsgpackProtocolCodec()
-            core = Peer(
-                transport=self.left,
-                peer_info=PeerInfo(name="outer-core", role="core", version="v4"),
-                codec=codec,
-            )
-            core.set_initialize_handler(
-                lambda _message: asyncio.sleep(
-                    0,
-                    result=InitializeOutput(
-                        peer=PeerInfo(name="outer-core", role="core", version="v4"),
-                        capabilities=[],
-                        metadata={},
-                    ),
-                )
-            )
-            await self.core.stop()
-            self.core = core
-            await self.core.start()
-
             runtime = SupervisorRuntime(
                 transport=self.right,
                 plugins_dir=plugins_root,
                 env_manager=FakeEnvManager(),
-                codec=codec,
+                worker_wire_codec_name="msgpack",
             )
             try:
                 await runtime.start()
+                self.assertEqual(runtime.codec.name, "json")
+                self.assertTrue(runtime.worker_sessions)
+                self.assertEqual(
+                    {
+                        session.codec.name
+                        for session in runtime.worker_sessions.values()
+                    },
+                    {"msgpack"},
+                )
                 await self.core.wait_until_remote_initialized()
                 handler_id = self._find_handler_id("hello")
 
