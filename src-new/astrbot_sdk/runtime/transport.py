@@ -113,17 +113,48 @@ def _frame_stdio_length_prefixed_payload(payload: bytes) -> bytes:
 
 
 def _write_stdio_payload(stream: IO[str] | IO[bytes], payload: bytes) -> None:
+    """
+    将负载数据写入标准输入输出流。
+
+    该函数处理三种类型的流：
+    1. 带有缓冲区的流（如 sys.stdout.buffer）
+    2. 文本流（如以文本模式打开的文件）
+    3. 二进制流（如以二进制模式打开的文件）
+
+    Args:
+        stream: 要写入的输入输出流，可以是文本流或二进制流
+        payload: 要写入的字节数据负载
+
+    Note:
+        - 优先使用 buffer 属性进行原始字节写入
+        - 对于文本流，需要将字节解码为字符串
+        - 无论哪种流，写入后都会立即刷新
+    """
+    # 情况1: 流有 buffer 属性（如 sys.stdout）
+    # 这是最高效的方式，直接写入字节数据
     if hasattr(stream, "buffer"):
+        # 使用底层的二进制缓冲区写入字节
         stream.buffer.write(payload)  # type: ignore[attr-defined]
+        # 刷新缓冲区确保数据立即发送
         stream.flush()  # type: ignore[call-arg]
         return
+
+    # 情况2: 流是文本模式（io.TextIOBase）
     if isinstance(stream, io.TextIOBase):
+        # 将文本流转换为正确的类型
         text_stream = cast(IO[str], stream)
+        # 将字节解码为UTF-8字符串后写入
         text_stream.write(payload.decode("utf-8"))
+        # 刷新缓冲区
         text_stream.flush()
         return
+
+    # 情况3: 流是二进制模式
+    # 将二进制流转换为正确的类型
     binary_stream = cast(IO[bytes], stream)
+    # 直接写入字节数据
     binary_stream.write(payload)
+    # 刷新缓冲区
     binary_stream.flush()
 
 
@@ -229,25 +260,75 @@ class StdioTransport(Transport):
         self._closed.set()
 
     async def send(self, payload: RawPayload) -> None:
+        """
+        通过标准输入输出发送原始数据负载。
+
+        这是一个异步发送方法，支持两种发送模式：
+        1. 子进程模式：通过子进程的标准输入发送
+        2. 标准输出模式：通过系统标准输出发送（使用线程池避免阻塞）
+
+        同时支持两种消息帧格式：
+        - line: 以换行符分隔的消息（简单文本协议）
+        - length-prefixed: 长度前缀格式（二进制安全协议）
+
+        Args:
+            payload (RawPayload): 要发送的原始数据负载
+
+        Raises:
+            RuntimeError: 当子进程标准输入不可用时
+            RuntimeError: 当标准输出不可用时
+            Exception: 写入过程中可能发生的其他异常
+
+        注意：
+            - 对于子进程模式，使用异步写入和drain来避免背压问题
+            - 对于标准输出模式，使用线程池避免阻塞事件循环
+            - 负载会被先编码为字节，然后根据帧格式进行封装
+        """
+        # 第一步：将负载转换为字节格式
+        # RawPayload可以是字符串、字节或其他类型，统一转为字节
         encoded = _ensure_bytes(payload)
+
+        # 第二步：根据帧格式封装负载
+        # "line"格式：简单添加换行符，适合文本协议
+        # 其他格式：添加长度前缀，适合二进制协议
         if self._framing == "line":
-            framed = _frame_stdio_line_payload(encoded)
+            framed = _frame_stdio_line_payload(encoded)  # 添加换行符分隔
         else:
-            framed = _frame_stdio_length_prefixed_payload(encoded)
+            framed = _frame_stdio_length_prefixed_payload(encoded)  # 添加4字节长度前缀
+
+        # 第三步：选择发送方式
         if self._process is not None:
+            # 子进程模式：通过子进程的标准输入发送
             if self._process.stdin is None:
+                # 检查标准输入流是否可用
                 raise RuntimeError("STDIO subprocess stdin 不可用")
+
+            # 将封装后的数据写入子进程的标准输入
             self._process.stdin.write(framed)
+
+            # 等待数据真正被发送出去
+            # drain()会等待写缓冲区清空，避免背压
             await self._process.stdin.drain()
             return
 
+        # 标准输出模式：直接写入系统标准输出
         if self._stdout is None:
+            # 检查标准输出流是否可用
             raise RuntimeError("STDIO stdout 不可用")
 
+        # 定义一个同步写入函数
         def _write() -> None:
-            assert self._stdout is not None
-            _write_stdio_payload(self._stdout, framed)
+            """
+            同步写入函数，用于在线程池中执行。
 
+            因为标准输出写入可能会阻塞，所以放到线程池中执行，
+            避免阻塞事件循环。
+            """
+            assert self._stdout is not None  # 类型检查，确保不为空
+            _write_stdio_payload(self._stdout, framed)  # 执行实际的写入操作
+
+        # 在线程池中执行同步写入函数
+        # asyncio.to_thread会将同步函数提交到线程池，返回一个可等待的协程
         await asyncio.to_thread(_write)
 
     async def _read_process_loop(self) -> None:

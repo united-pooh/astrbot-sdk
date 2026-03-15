@@ -80,17 +80,66 @@ def _install_signal_handlers(stop_event: asyncio.Event) -> None:
 
 
 def _prepare_stdio_transport(
-    stdin: IO[str] | IO[bytes] | None,
-    stdout: IO[str] | IO[bytes] | None,
-    *,
-    binary: bool = False,
-) -> tuple[IO[str] | IO[bytes], IO[str] | IO[bytes], IO[str] | None]:
+        stdin: IO[str] | IO[bytes] | None,
+        stdout: IO[str] | IO[bytes] | None,
+        *,
+        binary: bool = False,
+) -> tuple[IO[str] | IO[bytes], IO[bytes], IO[str] | None]:
+    """
+    准备标准输入输出传输层，用于与工作进程通信。
+
+    这个函数负责：
+    1. 确定使用哪个流作为传输层的标准输入
+    2. 确定使用哪个流作为传输层的标准输出
+    3. 重定向系统的标准输出到标准错误，避免干扰协议通信
+
+    Args:
+        stdin: 自定义标准输入流，None表示使用系统标准输入
+        stdout: 自定义标准输出流，None表示使用系统标准输出
+        binary: 是否使用二进制模式。True时使用sys.stdin.buffer/sys.stdout.buffer，
+                False时使用sys.stdin/sys.stdout（文本模式）
+
+    Returns:
+        包含三个元素的元组:
+        - transport_stdin: 用于传输层的标准输入流
+        - transport_stdout: 用于传输层的标准输出流
+        - original_stdout: 原始的标准输出流（需要恢复时使用）
+
+    注意:
+        当使用系统标准输出作为传输层时，会将sys.stdout重定向到sys.stderr，
+        这样普通的print语句不会干扰JSON-RPC等协议通信。
+    """
+    # 情况1: 调用者同时提供了自定义的标准输入和输出
+    # 这种情况下不需要重定向，直接使用提供的流
     if stdin is not None and stdout is not None:
         return stdin, stdout, None
-    transport_stdin = stdin or (sys.stdin.buffer if binary else sys.stdin)
-    transport_stdout = stdout or (sys.stdout.buffer if binary else sys.stdout)
+
+    # 确定传输层使用的标准输入
+    # 如果提供了自定义stdin则使用它，否则使用系统标准输入
+    if stdin is not None:
+        transport_stdin = stdin
+    else:
+        # 根据binary参数决定使用二进制缓冲区还是文本流
+        transport_stdin = sys.stdin.buffer if binary else sys.stdin
+
+    # 确定传输层使用的标准输出
+    # 如果提供了自定义stdout则使用它，否则使用系统标准输出
+    if stdout is not None:
+        transport_stdout = stdout
+    else:
+        # 根据binary参数决定使用二进制缓冲区还是文本流
+        transport_stdout = sys.stdout.buffer if binary else sys.stdout
+
+    # 保存原始的标准输出，以便后续恢复
     original_stdout = sys.stdout
+
+    # 关键步骤：重定向标准输出到标准错误
+    # 这样做的目的是：
+    # 1. 传输层需要使用标准输出与工作进程通信
+    # 2. 普通的print语句不应该干扰这个通信通道
+    # 3. 将print输出重定向到stderr，让开发者能看到调试信息
     sys.stdout = sys.stderr
+
     return transport_stdin, transport_stdout, original_stdout
 
 
@@ -102,17 +151,49 @@ def _sdk_source_dir(repo_root: Path) -> Path:
 
 
 async def _wait_for_shutdown(peer: Peer, stop_event: asyncio.Event) -> None:
+    """
+    等待关闭信号或对等连接关闭，用于优雅地终止工作进程。
+
+    这是一个辅助函数，同时监听两个事件：
+    1. stop_event: 外部触发的主动关闭信号
+    2. peer.wait_closed(): 对等连接意外关闭（如工作进程崩溃）
+
+    只要其中一个事件发生，函数就会返回，并清理另一个等待任务。
+
+    Args:
+        peer (Peer): 与工作进程建立的对等连接对象
+        stop_event (asyncio.Event): 用于触发主动关闭的事件对象
+
+    注意：
+        - 当工作进程意外退出时，peer.wait_closed() 会完成
+        - 当需要主动停止时，外部代码会设置 stop_event
+        - 此函数确保不泄漏任何等待任务
+    """
+    # 创建两个异步任务：
+    # 1. 等待停止事件被设置
     stop_waiter = asyncio.create_task(stop_event.wait())
+
+    # 2. 等待对等连接关闭（工作进程退出或断开连接）
     transport_waiter = asyncio.create_task(peer.wait_closed())
+
+    # 同时等待两个任务，只要任意一个完成就返回
     done, pending = await asyncio.wait(
-        {stop_waiter, transport_waiter},
-        return_when=asyncio.FIRST_COMPLETED,
+        {stop_waiter, transport_waiter},  # 等待的任务集合
+        return_when=asyncio.FIRST_COMPLETED,  # 第一个任务完成时返回
     )
+
+    # 取消所有未完成的任务（避免任务泄漏）
     for task in pending:
-        task.cancel()
+        task.cancel()  # 发送取消信号
+        # 注意：这里不等待任务取消，因为我们不关心结果
+
+    # 处理已完成的任务，获取结果（如果有）
     for task in done:
-        if not task.cancelled():
-            task.result()
+        if not task.cancelled():  # 确保任务没有被取消
+            task.result()  # 获取任务结果（可能抛出异常）
+
+    # 注意：如果有异常（如任务失败），会在 task.result() 中抛出
+    # 但这里不捕获，让调用者处理
 
 
 def _plugin_name_from_handler_id(handler_id: str) -> str:
@@ -159,80 +240,133 @@ class WorkerSession:
         self._connection_watch_task: asyncio.Task[None] | None = None
 
     async def start(self) -> None:
+        """
+        启动工作进程（worker）并建立与核心的通信连接。
+
+        该方法负责：
+        1. 构建工作进程的启动命令和环境变量
+        2. 创建标准输入输出传输层（StdioTransport）
+        3. 初始化对等连接（Peer）
+        4. 等待工作进程初始化完成
+        5. 解析工作进程返回的元数据（插件、能力等）
+
+        Raises:
+            RuntimeError: 如果工作进程在初始化阶段退出
+            Exception: 其他启动过程中的异常，会触发停止流程
+        """
+        # 获取工作进程的启动命令、Python解释器路径和工作目录
         python_path, command, cwd = self._worker_command()
+
+        # 获取SDK源码目录路径
         repo_src_dir = str(_sdk_source_dir(self.repo_root))
+
+        # 复制当前环境变量
         env = os.environ.copy()
+
+        # 设置PYTHONPATH以确保工作进程可以导入SDK模块
         existing_pythonpath = env.get("PYTHONPATH")
         env["PYTHONPATH"] = (
-            f"{repo_src_dir}{os.pathsep}{existing_pythonpath}"
+            f"{repo_src_dir}{os.pathsep}{existing_pythonpath}"  # 将SDK源码目录添加到现有PYTHONPATH前面
             if existing_pythonpath
-            else repo_src_dir
+            else repo_src_dir  # 如果没有现有PYTHONPATH，则只使用SDK源码目录
         )
-        env.setdefault("PYTHONIOENCODING", "utf-8")
-        env.setdefault("PYTHONUTF8", "1")
 
+        # 设置编码相关的环境变量，确保跨平台兼容性
+        env.setdefault("PYTHONIOENCODING", "utf-8")  # 标准输入输出使用UTF-8编码
+        env.setdefault("PYTHONUTF8", "1")  # 启用Python的UTF-8模式（Python 3.7+）
+
+        # 创建标准输入输出传输层，用于与工作进程通信
         transport = StdioTransport(
-            command=command,
-            cwd=cwd,
-            env=env,
-            framing=self.codec.stdio_framing,
+            command=command,  # 要执行的命令
+            cwd=cwd,  # 工作目录
+            env=env,  # 环境变量
+            framing=self.codec.stdio_framing,  # 消息帧格式（如JSON-RPC）
         )
+
+        # 创建对等连接对象，管理与工作进程的通信
         self.peer = Peer(
             transport=transport,
-            peer_info=PeerInfo(name="astrbot-core", role="core", version="v4"),
-            codec=self.codec,
+            peer_info=PeerInfo(name="astrbot-core", role="core", version="v4"),  # 本端（核心）信息
+            codec=self.codec,  # 编解码器
         )
-        self.peer.set_initialize_handler(self._handle_initialize)
-        self.peer.set_invoke_handler(self._handle_capability_invoke)
+
+        # 设置消息处理器
+        self.peer.set_initialize_handler(self._handle_initialize)  # 处理初始化消息
+        self.peer.set_invoke_handler(self._handle_capability_invoke)  # 处理能力调用消息
+
         try:
+            # 启动对等连接（这会启动工作进程）
             await self.peer.start()
-            # 同时监听初始化完成和连接关闭，避免 worker 崩溃时等满超时
+
+            # 同时监听两个异步任务：
+            # 1. 等待远程端（工作进程）初始化完成
+            # 2. 等待连接关闭（工作进程崩溃或退出）
             init_task = asyncio.create_task(
-                self.peer.wait_until_remote_initialized(timeout=None)
+                self.peer.wait_until_remote_initialized(timeout=None)  # 无超时，一直等待
             )
-            closed_task = asyncio.create_task(self.peer.wait_closed())
+            closed_task = asyncio.create_task(self.peer.wait_closed())  # 等待连接关闭
+
+            # 等待任意一个任务先完成
             done, pending = await asyncio.wait(
                 {init_task, closed_task},
-                return_when=asyncio.FIRST_COMPLETED,
+                return_when=asyncio.FIRST_COMPLETED,  # 第一个任务完成时就返回
             )
+
+            # 取消所有未完成的任务
             for task in pending:
                 task.cancel()
                 try:
-                    await task
+                    await task  # 等待任务真正取消
                 except asyncio.CancelledError:
-                    pass
+                    pass  # 忽略取消异常
 
+            # 如果连接关闭任务先完成，说明工作进程在初始化阶段就退出了
             if closed_task in done:
                 raise RuntimeError(f"worker 组 {self.group_id} 在初始化阶段退出")
 
+            # 解析工作进程提供的功能信息
+            # 获取处理器列表
             self.handlers = list(self.peer.remote_handlers)
+
+            # 获取提供的能力列表
             self.provided_capabilities = list(self.peer.remote_provided_capabilities)
+
+            # 获取元数据
             metadata = dict(self.peer.remote_metadata)
+
+            # 解析已加载的插件列表
             remote_loaded_plugins = metadata.get("loaded_plugins")
             if isinstance(remote_loaded_plugins, list):
+                # 如果工作进程返回了插件列表，使用它
                 self.loaded_plugins = [
                     plugin_name
                     for plugin_name in remote_loaded_plugins
-                    if isinstance(plugin_name, str)
+                    if isinstance(plugin_name, str)  # 确保是字符串类型
                 ]
             else:
+                # 否则使用本地配置的插件
                 self.loaded_plugins = [plugin.name for plugin in self.plugins]
+
+            # 解析跳过的插件（加载失败的插件）及其原因
             remote_skipped_plugins = metadata.get("skipped_plugins")
             if isinstance(remote_skipped_plugins, dict):
                 self.skipped_plugins = {
-                    str(plugin_name): str(reason)
+                    str(plugin_name): str(reason)  # 确保键和值都是字符串
                     for plugin_name, reason in remote_skipped_plugins.items()
                 }
+
+            # 解析能力来源（哪个插件提供了哪个能力）
             remote_capability_sources = metadata.get("capability_sources")
             if isinstance(remote_capability_sources, dict):
                 self.capability_sources = {
-                    str(capability_name): str(plugin_name)
+                    str(capability_name): str(plugin_name)  # 能力名称 -> 插件名称的映射
                     for capability_name, plugin_name in remote_capability_sources.items()
                 }
 
         except Exception:
+            # 如果启动过程中出现任何异常，确保停止工作进程
             await self.stop()
-            raise
+            raise  # 重新抛出异常，让调用者处理
 
     def _worker_command(self) -> tuple[Path, list[str], str]:
         if self.group is not None:

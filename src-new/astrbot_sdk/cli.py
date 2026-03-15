@@ -877,11 +877,12 @@ def cli(ctx, verbose: bool) -> None:
 def run(plugins_dir: Path, worker_wire_codec: str) -> None:
     """Start the plugin supervisor over stdio."""
     entrypoint = (
-        run_supervisor(plugins_dir=plugins_dir)
+        run_supervisor(plugins_dir=plugins_dir,stdout=stdout)
         if worker_wire_codec == "json"
         else run_supervisor(
             plugins_dir=plugins_dir,
             worker_wire_codec=worker_wire_codec,
+            stdout=stdout
         )
     )
     _run_async_entrypoint(
@@ -1048,15 +1049,15 @@ def worker(
     target = str(group_metadata or plugin_dir)
     if group_metadata is not None:
         entrypoint = (
-            run_plugin_worker(group_metadata=group_metadata)
+            run_plugin_worker(group_metadata=group_metadata,stdout=stdout)
             if wire_codec == "json"
-            else run_plugin_worker(group_metadata=group_metadata, wire_codec=wire_codec)
+            else run_plugin_worker(group_metadata=group_metadata, wire_codec=wire_codec,stdout=stdout)
         )
     else:
         entrypoint = (
-            run_plugin_worker(plugin_dir=plugin_dir)
+            run_plugin_worker(plugin_dir=plugin_dir,stdout=stdout)
             if wire_codec == "json"
-            else run_plugin_worker(plugin_dir=plugin_dir, wire_codec=wire_codec)
+            else run_plugin_worker(plugin_dir=plugin_dir, wire_codec=wire_codec,stdout=stdout)
         )
     _run_async_entrypoint(
         entrypoint,

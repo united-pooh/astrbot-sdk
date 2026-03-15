@@ -29,6 +29,17 @@ tmp/
 openspec/
 scripts/
 docs/zh/reference
+test_plugin/astrbot_plugin_self_learning-main/
+test_plugin/test/
+test_plugin/test_1/
+test_plugin/test_2/
+test_plugin/test_3/
+test_plugin/test_4/
+test_plugin/test_5/
+cs/test_local_test_plugins_integration.py
+cs/test_plugin.py
+.claude/
+astrbot_plugin_my_demo/
 
 # Virtual environments
 .venv/
