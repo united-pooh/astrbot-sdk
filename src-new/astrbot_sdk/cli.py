@@ -3,16 +3,18 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import json
 import re
 import sys
 import typing
 import zipfile
+from contextlib import ExitStack
 from collections.abc import Coroutine
 from dataclasses import dataclass, field
 from pathlib import Path
 from textwrap import dedent
-from typing import Any
+from typing import IO, Any
 
 import click
 from loguru import logger
@@ -86,6 +88,44 @@ def setup_logger(verbose: bool = False) -> None:
         level="DEBUG" if verbose else "INFO",
         colorize=True,
     )
+
+
+def _resolve_cli_stdout_target(target: str | None) -> str:
+    """Normalize CLI --stdout option.
+
+    Values:
+      - None: default to "silent" on TTY, otherwise "console"
+      - "silent": write to an in-memory buffer (StringIO/BytesIO)
+      - "console": write to process stdout (pass stdout=None)
+      - other: treated as a filesystem path
+    """
+    if target is None:
+        is_tty = bool(getattr(sys.stdout, "isatty", lambda: False)())
+        return "silent" if is_tty else "console"
+    normalized = target.strip()
+    keyword = normalized.lower()
+    if keyword in {"", "-", "console", "stdout"}:
+        return "console"
+    if keyword in {"silent", "quiet", "mute", "null"}:
+        return "silent"
+    return normalized
+
+
+def _open_cli_protocol_stdout(
+    *,
+    target: str,
+    wire_codec: str,
+    stack: ExitStack,
+) -> IO[str] | IO[bytes] | None:
+    if target == "console":
+        return None
+    if target == "silent":
+        return io.BytesIO() if wire_codec == "msgpack" else io.StringIO()
+
+    path = Path(target)
+    if wire_codec == "msgpack":
+        return stack.enter_context(path.open("wb"))
+    return stack.enter_context(path.open("w", encoding="utf-8"))
 
 
 def _run_async_entrypoint(
@@ -874,25 +914,40 @@ def cli(ctx, verbose: bool) -> None:
     type=click.Choice(["json", "msgpack"]),
     help="Wire codec for supervisor-to-worker transport",
 )
-def run(plugins_dir: Path, worker_wire_codec: str) -> None:
+@click.option(
+    "--stdout",
+    "stdout_target",
+    default=None,
+    show_default="silent",
+    metavar="silent|console|PATH",
+    help=(
+        "Where to write protocol stdout: silent, console, or a file path. "
+        "Defaults to silent on TTY; console when stdout is piped."
+    ),
+)
+def run(plugins_dir: Path, worker_wire_codec: str, stdout_target: str | None) -> None:
     """Start the plugin supervisor over stdio."""
-    entrypoint = (
-        run_supervisor(plugins_dir=plugins_dir,stdout=stdout)
-        if worker_wire_codec == "json"
-        else run_supervisor(
+    with ExitStack() as stack:
+        resolved_target = _resolve_cli_stdout_target(stdout_target)
+        stdout = _open_cli_protocol_stdout(
+            target=resolved_target,
+            wire_codec=worker_wire_codec,
+            stack=stack,
+        )
+        entrypoint = run_supervisor(
             plugins_dir=plugins_dir,
             worker_wire_codec=worker_wire_codec,
-            stdout=stdout
+            stdout=stdout,
         )
-    )
-    _run_async_entrypoint(
-        entrypoint,
-        log_message=f"启动插件主管进程，插件目录：{plugins_dir}",
-        context={
-            "plugins_dir": plugins_dir,
-            "worker_wire_codec": worker_wire_codec,
-        },
-    )
+        _run_async_entrypoint(
+            entrypoint,
+            log_message=f"启动插件主管进程，插件目录：{plugins_dir}",
+            context={
+                "plugins_dir": plugins_dir,
+                "worker_wire_codec": worker_wire_codec,
+                "stdout": resolved_target,
+            },
+        )
 
 
 @cli.command()
@@ -1035,8 +1090,22 @@ def dev(
     show_default=True,
     type=click.Choice(["json", "msgpack"]),
 )
+@click.option(
+    "--stdout",
+    "stdout_target",
+    default=None,
+    show_default="silent",
+    metavar="silent|console|PATH",
+    help=(
+        "Where to write protocol stdout: silent, console, or a file path. "
+        "Defaults to silent on TTY; console when stdout is piped."
+    ),
+)
 def worker(
-    plugin_dir: Path | None, group_metadata: Path | None, wire_codec: str
+    plugin_dir: Path | None,
+    group_metadata: Path | None,
+    wire_codec: str,
+    stdout_target: str | None,
 ) -> None:
     """Internal command used by the supervisor to start a worker."""
     if plugin_dir is None and group_metadata is None:
@@ -1046,25 +1115,36 @@ def worker(
             "--plugin-dir and --group-metadata are mutually exclusive"
         )
 
-    target = str(group_metadata or plugin_dir)
-    if group_metadata is not None:
-        entrypoint = (
-            run_plugin_worker(group_metadata=group_metadata,stdout=stdout)
-            if wire_codec == "json"
-            else run_plugin_worker(group_metadata=group_metadata, wire_codec=wire_codec,stdout=stdout)
+    with ExitStack() as stack:
+        resolved_target = _resolve_cli_stdout_target(stdout_target)
+        stdout = _open_cli_protocol_stdout(
+            target=resolved_target,
+            wire_codec=wire_codec,
+            stack=stack,
         )
-    else:
-        entrypoint = (
-            run_plugin_worker(plugin_dir=plugin_dir,stdout=stdout)
-            if wire_codec == "json"
-            else run_plugin_worker(plugin_dir=plugin_dir, wire_codec=wire_codec,stdout=stdout)
+        target = str(group_metadata or plugin_dir)
+        if group_metadata is not None:
+            entrypoint = run_plugin_worker(
+                group_metadata=group_metadata,
+                wire_codec=wire_codec,
+                stdout=stdout,
+            )
+        else:
+            entrypoint = run_plugin_worker(
+                plugin_dir=plugin_dir,
+                wire_codec=wire_codec,
+                stdout=stdout,
+            )
+        _run_async_entrypoint(
+            entrypoint,
+            log_message=f"启动插件工作进程：{target}",
+            log_level="debug",
+            context={
+                "plugin_dir": plugin_dir,
+                "wire_codec": wire_codec,
+                "stdout": resolved_target,
+            },
         )
-    _run_async_entrypoint(
-        entrypoint,
-        log_message=f"启动插件工作进程：{target}",
-        log_level="debug",
-        context={"plugin_dir": plugin_dir, "wire_codec": wire_codec},
-    )
 
 
 @cli.command(hidden=True)

@@ -4,6 +4,7 @@
 
 # 测试配置
 import asyncio
+import os
 import sys
 import tempfile
 import textwrap
@@ -13,6 +14,27 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+
+# NOTE: In some Windows environments, `os.mkdir(path, 0o700)` can create a directory
+# that the current process cannot access (WinError 5). `tempfile` and pytest's tmp
+# fixtures use 0o700 by default, which breaks `tmp_path` and cleanup. We treat the
+# `mode` argument as a no-op on Windows (matching the common expectation).
+if sys.platform == "win32":
+    _orig_mkdir = os.mkdir
+
+    def _mkdir_ignore_mode(path, mode=0o777, *, dir_fd=None):  # type: ignore[no-untyped-def]
+        if dir_fd is None:
+            return _orig_mkdir(path)
+        return _orig_mkdir(path, dir_fd=dir_fd)
+
+    os.mkdir = _mkdir_ignore_mode  # type: ignore[assignment]
+
+# Keep pytest/tempfile under the repo so we don't depend on system TEMP/TMP state.
+_pytest_temp_root = Path(__file__).parent.parent / "tmp" / "pytest-temp-root"
+_pytest_temp_root.mkdir(parents=True, exist_ok=True)
+tempfile.tempdir = str(_pytest_temp_root)
+os.environ["TMP"] = str(_pytest_temp_root)
+os.environ["TEMP"] = str(_pytest_temp_root)
 
 # 将src-new目录添加到Python路径 - 这使得测试可以运行，但不算作"已安装"的包
 SRC_NEW_PATH = str(Path(__file__).parent.parent / "src-new")
