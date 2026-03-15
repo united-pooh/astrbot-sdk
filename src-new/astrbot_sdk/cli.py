@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import asyncio
-import io
 import json
+import os
 import re
 import sys
 import typing
@@ -95,7 +95,7 @@ def _resolve_cli_stdout_target(target: str | None) -> str:
 
     Values:
       - None: default to "silent" on TTY, otherwise "console"
-      - "silent": write to an in-memory buffer (StringIO/BytesIO)
+      - "silent": discard protocol stdout
       - "console": write to process stdout (pass stdout=None)
       - other: treated as a filesystem path
     """
@@ -120,7 +120,9 @@ def _open_cli_protocol_stdout(
     if target == "console":
         return None
     if target == "silent":
-        return io.BytesIO() if wire_codec == "msgpack" else io.StringIO()
+        # Never buffer protocol stdout in memory: long-running sessions can OOM.
+        # Use a discard sink instead.
+        return stack.enter_context(open(os.devnull, "wb"))
 
     path = Path(target)
     if wire_codec == "msgpack":
@@ -921,7 +923,7 @@ def cli(ctx, verbose: bool) -> None:
     show_default="silent",
     metavar="silent|console|PATH",
     help=(
-        "Where to write protocol stdout: silent, console, or a file path. "
+        "Where to write protocol stdout: silent (discard), console, or a file path. "
         "Defaults to silent on TTY; console when stdout is piped."
     ),
 )
@@ -1097,7 +1099,7 @@ def dev(
     show_default="silent",
     metavar="silent|console|PATH",
     help=(
-        "Where to write protocol stdout: silent, console, or a file path. "
+        "Where to write protocol stdout: silent (discard), console, or a file path. "
         "Defaults to silent on TTY; console when stdout is piped."
     ),
 )

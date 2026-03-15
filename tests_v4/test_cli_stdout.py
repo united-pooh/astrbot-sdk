@@ -41,24 +41,28 @@ def test_resolve_stdout_default_is_console_when_piped(monkeypatch) -> None:
     assert _resolve_cli_stdout_target(None) == "console"
 
 
-def test_open_stdout_silent_json_returns_stringio() -> None:
+def test_open_stdout_silent_json_returns_discard_sink() -> None:
     with ExitStack() as stack:
         stdout = _open_cli_protocol_stdout(
             target="silent",
             wire_codec="json",
             stack=stack,
         )
-        assert isinstance(stdout, io.StringIO)
+        assert isinstance(stdout, io.BufferedIOBase)
+        assert stdout.write(b"hello\n") == len(b"hello\n")
+        stdout.flush()
 
 
-def test_open_stdout_silent_msgpack_returns_bytesio() -> None:
+def test_open_stdout_silent_msgpack_returns_discard_sink() -> None:
     with ExitStack() as stack:
         stdout = _open_cli_protocol_stdout(
             target="silent",
             wire_codec="msgpack",
             stack=stack,
         )
-        assert isinstance(stdout, io.BytesIO)
+        assert isinstance(stdout, io.BufferedIOBase)
+        assert stdout.write(b"\x01\x02") == 2
+        stdout.flush()
 
 
 def test_open_stdout_file_json(tmp_path) -> None:
@@ -85,4 +89,3 @@ def test_open_stdout_file_msgpack(tmp_path) -> None:
         assert isinstance(stdout, io.BufferedIOBase)
         stdout.write(b"\x01\x02")
     assert out_path.read_bytes() == b"\x01\x02"
-
