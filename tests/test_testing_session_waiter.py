@@ -215,9 +215,13 @@ async def test_has_active_waiter_ignores_completed_waiter_before_unregister() ->
     manager = dispatcher._session_waiters
     original_unregister = manager.unregister
 
-    async def delayed_unregister(session_key: str) -> None:
+    async def delayed_unregister(
+        session_key: str,
+        *,
+        plugin_id: str | None = None,
+    ) -> None:
         await release_unregister.wait()
-        await original_unregister(session_key)
+        await original_unregister(session_key, plugin_id=plugin_id)
 
     manager.unregister = delayed_unregister  # type: ignore[method-assign]
 
@@ -304,6 +308,96 @@ async def test_session_waiter_dispatch_uses_registering_plugin_id() -> None:
     await task
 
     assert seen_plugin_ids == ["plugin.alpha"]
+
+
+@pytest.mark.asyncio
+async def test_session_waiters_do_not_replace_across_plugins_same_session() -> None:
+    peer = MockPeer(MockCapabilityRouter())
+    dispatcher = HandlerDispatcher(
+        plugin_id="worker-group",
+        peer=peer,
+        handlers=[],
+    )
+    event_payload = {
+        "type": "message",
+        "event_type": "message",
+        "text": "followup",
+        "session_id": "session-1",
+        "user_id": "tester",
+        "platform": "test",
+        "platform_id": "test",
+        "message_type": "private",
+        "raw": {"event_type": "message"},
+    }
+    event_a = MessageEvent.from_payload(
+        event_payload,
+        context=Context(peer=peer, plugin_id="plugin.alpha"),
+    )
+    event_b = MessageEvent.from_payload(
+        event_payload,
+        context=Context(peer=peer, plugin_id="plugin.beta"),
+    )
+    seen_plugin_ids: list[str] = []
+
+    async def waiter_alpha(
+        controller: SessionController,
+        waiter_event: MessageEvent,
+    ) -> None:
+        seen_plugin_ids.append(waiter_event._context.plugin_id)
+        controller.stop()
+
+    async def waiter_beta(
+        controller: SessionController,
+        waiter_event: MessageEvent,
+    ) -> None:
+        seen_plugin_ids.append(waiter_event._context.plugin_id)
+        controller.stop()
+
+    async def task_alpha() -> None:
+        with caller_plugin_scope("plugin.alpha"):
+            await dispatcher._session_waiters.register(
+                event=event_a,
+                handler=waiter_alpha,
+                timeout=30,
+                record_history_chains=False,
+            )
+
+    async def task_beta() -> None:
+        with caller_plugin_scope("plugin.beta"):
+            await dispatcher._session_waiters.register(
+                event=event_b,
+                handler=waiter_beta,
+                timeout=30,
+                record_history_chains=False,
+            )
+
+    waiter_task_alpha = asyncio.create_task(task_alpha())
+    waiter_task_beta = asyncio.create_task(task_beta())
+    await asyncio.sleep(0)
+
+    assert sorted(dispatcher._session_waiters.get_waiter_plugin_ids("session-1")) == [
+        "plugin.alpha",
+        "plugin.beta",
+    ]
+
+    await dispatcher._session_waiters.dispatch(
+        MessageEvent.from_payload(
+            event_payload,
+            context=Context(peer=peer, plugin_id="plugin.alpha"),
+        ),
+        plugin_id="plugin.alpha",
+    )
+    await dispatcher._session_waiters.dispatch(
+        MessageEvent.from_payload(
+            event_payload,
+            context=Context(peer=peer, plugin_id="plugin.beta"),
+        ),
+        plugin_id="plugin.beta",
+    )
+    await waiter_task_alpha
+    await waiter_task_beta
+
+    assert sorted(seen_plugin_ids) == ["plugin.alpha", "plugin.beta"]
 
 
 async def _noop_waiter(
