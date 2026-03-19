@@ -204,11 +204,9 @@ class SessionWaiterManager:
     ) -> None:
         if plugin_id is None:
             plugin_ids = self.get_waiter_plugin_ids(session_key)
-            if not plugin_ids:
+            if len(plugin_ids) != 1:
                 return
-            for current_plugin_id in plugin_ids:
-                await self.unregister(session_key, plugin_id=current_plugin_id)
-            return
+            plugin_id = plugin_ids[0]
 
         key = self._make_key(plugin_id=plugin_id, session_key=session_key)
         self._entries.pop(key, None)
@@ -234,13 +232,9 @@ class SessionWaiterManager:
     ) -> bool:
         if plugin_id is None:
             plugin_ids = self.get_waiter_plugin_ids(session_key)
-            failed = False
-            for current_plugin_id in plugin_ids:
-                failed = (
-                    await self.fail(session_key, error, plugin_id=current_plugin_id)
-                    or failed
-                )
-            return failed
+            if len(plugin_ids) != 1:
+                return False
+            plugin_id = plugin_ids[0]
 
         key = self._make_key(plugin_id=plugin_id, session_key=session_key)
         entry = self._entries.get(key)

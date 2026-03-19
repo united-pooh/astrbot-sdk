@@ -400,6 +400,126 @@ async def test_session_waiters_do_not_replace_across_plugins_same_session() -> N
     assert sorted(seen_plugin_ids) == ["plugin.alpha", "plugin.beta"]
 
 
+@pytest.mark.asyncio
+async def test_fail_without_plugin_id_does_not_broadcast_across_plugins() -> None:
+    peer = MockPeer(MockCapabilityRouter())
+    dispatcher = HandlerDispatcher(
+        plugin_id="worker-group",
+        peer=peer,
+        handlers=[],
+    )
+    event_payload = {
+        "type": "message",
+        "event_type": "message",
+        "text": "followup",
+        "session_id": "session-1",
+        "user_id": "tester",
+        "platform": "test",
+        "platform_id": "test",
+        "message_type": "private",
+        "raw": {"event_type": "message"},
+    }
+    event_a = MessageEvent.from_payload(
+        event_payload,
+        context=Context(peer=peer, plugin_id="plugin.alpha"),
+    )
+    event_b = MessageEvent.from_payload(
+        event_payload,
+        context=Context(peer=peer, plugin_id="plugin.beta"),
+    )
+
+    async def waiter_alpha() -> None:
+        with caller_plugin_scope("plugin.alpha"):
+            await dispatcher._session_waiters.register(
+                event=event_a,
+                handler=_noop_waiter,
+                timeout=30,
+                record_history_chains=False,
+            )
+
+    async def waiter_beta() -> None:
+        with caller_plugin_scope("plugin.beta"):
+            await dispatcher._session_waiters.register(
+                event=event_b,
+                handler=_noop_waiter,
+                timeout=30,
+                record_history_chains=False,
+            )
+
+    task_a = asyncio.create_task(waiter_alpha())
+    task_b = asyncio.create_task(waiter_beta())
+    await asyncio.sleep(0)
+
+    assert (
+        await dispatcher._session_waiters.fail(
+            "session-1",
+            RuntimeError("stop waiter"),
+        )
+        is False
+    )
+    assert dispatcher.has_active_waiter(event_a) is True
+    assert dispatcher.has_active_waiter(event_b) is True
+
+    await dispatcher._session_waiters.fail(
+        "session-1",
+        RuntimeError("stop alpha"),
+        plugin_id="plugin.alpha",
+    )
+    with pytest.raises(RuntimeError, match="stop alpha"):
+        await task_a
+
+    assert dispatcher.has_active_waiter(event_b) is True
+    await dispatcher._session_waiters.fail(
+        "session-1",
+        RuntimeError("stop beta"),
+        plugin_id="plugin.beta",
+    )
+    with pytest.raises(RuntimeError, match="stop beta"):
+        await task_b
+
+
+@pytest.mark.asyncio
+async def test_plugin_harness_waits_for_waiter_side_effects_after_stop(
+    tmp_path: Path,
+) -> None:
+    plugin_dir = tmp_path / "session_waiter_stop_after_side_effects"
+    _write_session_waiter_plugin(plugin_dir)
+    (plugin_dir / "main.py").write_text(
+        "\n".join(
+            [
+                "import asyncio",
+                "from astrbot_sdk import Context, MessageEvent, SessionController, Star, on_command, session_waiter",
+                "",
+                "",
+                "class SessionWaiterPlugin(Star):",
+                '    @on_command("start")',
+                "    async def start(self, event: MessageEvent, ctx: Context) -> None:",
+                '        await event.reply("ready")',
+                '        await ctx.register_task(self.wait_for_followup(event), "wait for followup")',
+                "",
+                "    @session_waiter(timeout=30)",
+                "    async def wait_for_followup(",
+                "        self,",
+                "        controller: SessionController,",
+                "        event: MessageEvent,",
+                "    ) -> None:",
+                "        controller.stop()",
+                "        await asyncio.sleep(0)",
+                '        await event.reply(f"followup:{event.text}")',
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    async with PluginHarness.from_plugin_dir(plugin_dir) as harness:
+        first_records = await harness.dispatch_text("start", session_id="session-1")
+        second_records = await harness.dispatch_text("next", session_id="session-1")
+
+    assert [record.text for record in first_records] == ["ready"]
+    assert [record.text for record in second_records] == ["followup:next"]
+
+
 async def _noop_waiter(
     controller: SessionController,
     waiter_event: MessageEvent,

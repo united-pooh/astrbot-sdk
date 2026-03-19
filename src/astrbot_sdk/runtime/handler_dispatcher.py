@@ -515,6 +515,7 @@ class HandlerDispatcher:
             await self._session_waiters.fail(
                 active.session.session_key,
                 ConversationReplaced("conversation replaced by a newer session"),
+                plugin_id=self._resolve_plugin_id(loaded),
             )
             await asyncio.sleep(0)
             active.task.cancel()
