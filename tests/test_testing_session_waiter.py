@@ -101,6 +101,22 @@ def test_plugin_harness_waiter_probe_uses_dispatcher_public_api(tmp_path: Path) 
 
 
 @pytest.mark.asyncio
+async def test_plugin_harness_dispatches_followup_to_session_waiter(
+    tmp_path: Path,
+) -> None:
+    plugin_dir = tmp_path / "session_waiter_plugin"
+    _write_session_waiter_plugin(plugin_dir)
+
+    async with PluginHarness.from_plugin_dir(plugin_dir) as harness:
+        first_records = await harness.dispatch_text("start", session_id="session-1")
+        await asyncio.sleep(0)
+        second_records = await harness.dispatch_text("next", session_id="session-1")
+
+    assert [record.text for record in first_records] == ["ready"]
+    assert [record.text for record in second_records] == ["followup:next"]
+
+
+@pytest.mark.asyncio
 async def test_handler_dispatcher_exposes_active_waiter_probe() -> None:
     peer = MockPeer(MockCapabilityRouter())
     dispatcher = HandlerDispatcher(plugin_id="test-plugin", peer=peer, handlers=[])
