@@ -115,6 +115,7 @@ class SessionController:
 @dataclass(slots=True)
 class _WaiterEntry:
     session_key: str
+    plugin_id: str
     handler: Callable[[SessionController, MessageEvent], Awaitable[Any]]
     controller: SessionController
     record_history_chains: bool
@@ -140,6 +141,7 @@ class SessionWaiterManager:
         session_key = event.unified_msg_origin
         entry = _WaiterEntry(
             session_key=session_key,
+            plugin_id=event._context.plugin_id,
             handler=handler,
             controller=SessionController(),
             record_history_chains=record_history_chains,
@@ -230,6 +232,12 @@ class SessionWaiterManager:
 
     def has_waiter(self, event: MessageEvent) -> bool:
         return self.has_active_waiter(event)
+
+    def get_waiter_plugin_id(self, session_key: str) -> str | None:
+        entry = self._entries.get(session_key)
+        if entry is None or entry.controller.future.done():
+            return None
+        return entry.plugin_id
 
     async def dispatch(self, event: MessageEvent) -> dict[str, Any]:
         session_key = event.unified_msg_origin

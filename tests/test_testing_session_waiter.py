@@ -245,6 +245,67 @@ async def test_has_active_waiter_ignores_completed_waiter_before_unregister() ->
         await task
 
 
+@pytest.mark.asyncio
+async def test_session_waiter_dispatch_uses_registering_plugin_id() -> None:
+    peer = MockPeer(MockCapabilityRouter())
+    dispatcher = HandlerDispatcher(
+        plugin_id="worker-group",
+        peer=peer,
+        handlers=[],
+    )
+    event_payload = {
+        "type": "message",
+        "event_type": "message",
+        "text": "followup",
+        "session_id": "session-1",
+        "user_id": "tester",
+        "platform": "test",
+        "platform_id": "test",
+        "message_type": "private",
+        "raw": {"event_type": "message"},
+    }
+    register_event = MessageEvent.from_payload(
+        event_payload,
+        context=Context(peer=peer, plugin_id="plugin.alpha"),
+    )
+    seen_plugin_ids: list[str] = []
+
+    async def capture_waiter(
+        controller: SessionController,
+        waiter_event: MessageEvent,
+    ) -> None:
+        seen_plugin_ids.append(waiter_event._context.plugin_id)
+        controller.stop()
+
+    async def waiter_task() -> None:
+        with caller_plugin_scope("plugin.alpha"):
+            await dispatcher._session_waiters.register(
+                event=register_event,
+                handler=capture_waiter,
+                timeout=30,
+                record_history_chains=False,
+            )
+
+    task = asyncio.create_task(waiter_task())
+    await asyncio.sleep(0)
+
+    await dispatcher.invoke(
+        InvokeMessage(
+            id="req-session-waiter-plugin-id",
+            capability="handler.invoke",
+            input={
+                "handler_id": "__sdk_session_waiter__",
+                "event": dict(event_payload),
+                "args": {},
+            },
+        ),
+        CancelToken(),
+    )
+    await task
+
+    assert seen_plugin_ids == ["plugin.alpha"]
+
+
 async def _noop_waiter(
     controller: SessionController,
     waiter_event: MessageEvent,

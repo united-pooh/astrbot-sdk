@@ -115,8 +115,12 @@ class HandlerDispatcher:
     async def invoke(self, message, cancel_token: CancelToken) -> dict[str, Any]:
         handler_id = str(message.input.get("handler_id", ""))
         if handler_id == "__sdk_session_waiter__":
-            plugin_id = self._plugin_id
             event_payload = message.input.get("event", {})
+            session_key = str(event_payload.get("session_id") or "")
+            plugin_id = (
+                self._session_waiters.get_waiter_plugin_id(session_key)
+                or self._plugin_id
+            )
             ctx = Context(
                 peer=self._peer,
                 plugin_id=plugin_id,
