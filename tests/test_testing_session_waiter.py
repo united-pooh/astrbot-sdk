@@ -311,6 +311,77 @@ async def test_session_waiter_dispatch_uses_registering_plugin_id() -> None:
 
 
 @pytest.mark.asyncio
+async def test_session_waiter_dispatch_resolves_session_from_target_payload() -> None:
+    peer = MockPeer(MockCapabilityRouter())
+    dispatcher = HandlerDispatcher(
+        plugin_id="worker-group",
+        peer=peer,
+        handlers=[],
+    )
+    register_payload = {
+        "type": "message",
+        "event_type": "message",
+        "text": "followup",
+        "session_id": "session-1",
+        "user_id": "tester",
+        "platform": "test",
+        "platform_id": "test",
+        "message_type": "private",
+        "raw": {"event_type": "message"},
+    }
+    target_only_payload = {
+        "type": "message",
+        "event_type": "message",
+        "text": "followup",
+        "user_id": "tester",
+        "platform_id": "test",
+        "message_type": "private",
+        "target": {"conversation_id": "session-1", "platform": "test"},
+        "raw": {"event_type": "message"},
+    }
+    register_event = MessageEvent.from_payload(
+        register_payload,
+        context=Context(peer=peer, plugin_id="plugin.alpha"),
+    )
+    seen_plugin_ids: list[str] = []
+
+    async def capture_waiter(
+        controller: SessionController,
+        waiter_event: MessageEvent,
+    ) -> None:
+        seen_plugin_ids.append(waiter_event._context.plugin_id)
+        controller.stop()
+
+    async def waiter_task() -> None:
+        with caller_plugin_scope("plugin.alpha"):
+            await dispatcher._session_waiters.register(
+                event=register_event,
+                handler=capture_waiter,
+                timeout=30,
+                record_history_chains=False,
+            )
+
+    task = asyncio.create_task(waiter_task())
+    await asyncio.sleep(0)
+
+    await dispatcher.invoke(
+        InvokeMessage(
+            id="req-session-waiter-target-only",
+            capability="handler.invoke",
+            input={
+                "handler_id": "__sdk_session_waiter__",
+                "event": dict(target_only_payload),
+                "args": {},
+            },
+        ),
+        CancelToken(),
+    )
+    await task
+
+    assert seen_plugin_ids == ["plugin.alpha"]
+
+
+@pytest.mark.asyncio
 async def test_session_waiters_do_not_replace_across_plugins_same_session() -> None:
     peer = MockPeer(MockCapabilityRouter())
     dispatcher = HandlerDispatcher(
@@ -394,6 +465,120 @@ async def test_session_waiters_do_not_replace_across_plugins_same_session() -> N
         ),
         plugin_id="plugin.beta",
     )
+    await waiter_task_alpha
+    await waiter_task_beta
+
+    assert sorted(seen_plugin_ids) == ["plugin.alpha", "plugin.beta"]
+
+
+@pytest.mark.asyncio
+async def test_session_waiter_dispatch_accepts_explicit_plugin_id_for_ambiguous_session() -> (
+    None
+):
+    peer = MockPeer(MockCapabilityRouter())
+    dispatcher = HandlerDispatcher(
+        plugin_id="worker-group",
+        peer=peer,
+        handlers=[],
+    )
+    event_payload = {
+        "type": "message",
+        "event_type": "message",
+        "text": "followup",
+        "session_id": "session-1",
+        "user_id": "tester",
+        "platform": "test",
+        "platform_id": "test",
+        "message_type": "private",
+        "raw": {"event_type": "message"},
+    }
+    event_a = MessageEvent.from_payload(
+        event_payload,
+        context=Context(peer=peer, plugin_id="plugin.alpha"),
+    )
+    event_b = MessageEvent.from_payload(
+        event_payload,
+        context=Context(peer=peer, plugin_id="plugin.beta"),
+    )
+    seen_plugin_ids: list[str] = []
+
+    async def waiter_alpha(
+        controller: SessionController,
+        waiter_event: MessageEvent,
+    ) -> None:
+        seen_plugin_ids.append(waiter_event._context.plugin_id)
+        controller.stop()
+
+    async def waiter_beta(
+        controller: SessionController,
+        waiter_event: MessageEvent,
+    ) -> None:
+        seen_plugin_ids.append(waiter_event._context.plugin_id)
+        controller.stop()
+
+    async def task_alpha() -> None:
+        with caller_plugin_scope("plugin.alpha"):
+            await dispatcher._session_waiters.register(
+                event=event_a,
+                handler=waiter_alpha,
+                timeout=30,
+                record_history_chains=False,
+            )
+
+    async def task_beta() -> None:
+        with caller_plugin_scope("plugin.beta"):
+            await dispatcher._session_waiters.register(
+                event=event_b,
+                handler=waiter_beta,
+                timeout=30,
+                record_history_chains=False,
+            )
+
+    waiter_task_alpha = asyncio.create_task(task_alpha())
+    waiter_task_beta = asyncio.create_task(task_beta())
+    await asyncio.sleep(0)
+
+    with pytest.raises(LookupError, match="explicit plugin identity"):
+        await dispatcher.invoke(
+            InvokeMessage(
+                id="req-session-waiter-ambiguous",
+                capability="handler.invoke",
+                input={
+                    "handler_id": "__sdk_session_waiter__",
+                    "event": dict(event_payload),
+                    "args": {},
+                },
+            ),
+            CancelToken(),
+        )
+
+    await dispatcher.invoke(
+        InvokeMessage(
+            id="req-session-waiter-explicit-alpha",
+            capability="handler.invoke",
+            input={
+                "handler_id": "__sdk_session_waiter__",
+                "plugin_id": "plugin.alpha",
+                "event": dict(event_payload),
+                "args": {},
+            },
+        ),
+        CancelToken(),
+    )
+    await dispatcher.invoke(
+        InvokeMessage(
+            id="req-session-waiter-explicit-beta",
+            capability="handler.invoke",
+            input={
+                "handler_id": "__sdk_session_waiter__",
+                "plugin_id": "plugin.beta",
+                "event": dict(event_payload),
+                "args": {},
+            },
+        ),
+        CancelToken(),
+    )
+
     await waiter_task_alpha
     await waiter_task_beta
 
