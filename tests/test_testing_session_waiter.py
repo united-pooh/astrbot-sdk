@@ -7,8 +7,9 @@ from types import SimpleNamespace
 import pytest
 
 from astrbot_sdk._invocation_context import caller_plugin_scope
-from astrbot_sdk.context import Context
+from astrbot_sdk.context import CancelToken, Context
 from astrbot_sdk.events import MessageEvent
+from astrbot_sdk.protocol.messages import InvokeMessage
 from astrbot_sdk.runtime.handler_dispatcher import HandlerDispatcher
 from astrbot_sdk.session_waiter import SessionController
 from astrbot_sdk.testing import LocalRuntimeConfig, PluginHarness
@@ -144,6 +145,104 @@ async def test_handler_dispatcher_exposes_active_waiter_probe() -> None:
     with pytest.raises(RuntimeError, match="stop waiter"):
         await task
     assert dispatcher.has_active_waiter(event) is False
+
+
+@pytest.mark.asyncio
+async def test_session_waiter_dispatch_preserves_source_event_payload() -> None:
+    peer = MockPeer(MockCapabilityRouter())
+    dispatcher = HandlerDispatcher(plugin_id="test-plugin", peer=peer, handlers=[])
+    event_payload = {
+        "type": "message",
+        "event_type": "message",
+        "text": "followup",
+        "session_id": "session-1",
+        "user_id": "tester",
+        "platform": "test",
+        "platform_id": "test",
+        "message_type": "private",
+        "target": {"conversation_id": "session-1", "platform": "test"},
+        "raw": {"event_type": "message"},
+    }
+    event = MessageEvent.from_payload(
+        event_payload,
+        context=Context(peer=peer, plugin_id="test-plugin"),
+    )
+    seen_payloads: list[dict[str, object]] = []
+
+    async def capture_waiter(
+        controller: SessionController,
+        waiter_event: MessageEvent,
+    ) -> None:
+        source_payload = waiter_event._context._source_event_payload
+        seen_payloads.append(dict(source_payload))
+        controller.stop()
+
+    async def waiter_task() -> None:
+        with caller_plugin_scope("test-plugin"):
+            await dispatcher._session_waiters.register(
+                event=event,
+                handler=capture_waiter,
+                timeout=30,
+                record_history_chains=False,
+            )
+
+    task = asyncio.create_task(waiter_task())
+    await asyncio.sleep(0)
+
+    await dispatcher.invoke(
+        InvokeMessage(
+            id="req-session-waiter",
+            capability="handler.invoke",
+            input={
+                "handler_id": "__sdk_session_waiter__",
+                "event": dict(event_payload),
+                "args": {},
+            },
+        ),
+        CancelToken(),
+    )
+    await task
+
+    assert seen_payloads == [event_payload]
+
+
+@pytest.mark.asyncio
+async def test_has_active_waiter_ignores_completed_waiter_before_unregister() -> None:
+    peer = MockPeer(MockCapabilityRouter())
+    dispatcher = HandlerDispatcher(plugin_id="test-plugin", peer=peer, handlers=[])
+    event = _build_event(text="hello", session_id="session-1", peer=peer)
+    release_unregister = asyncio.Event()
+    manager = dispatcher._session_waiters
+    original_unregister = manager.unregister
+
+    async def delayed_unregister(session_key: str) -> None:
+        await release_unregister.wait()
+        await original_unregister(session_key)
+
+    manager.unregister = delayed_unregister  # type: ignore[method-assign]
+
+    async def waiter_task() -> None:
+        with caller_plugin_scope("test-plugin"):
+            await manager.register(
+                event=event,
+                handler=_noop_waiter,
+                timeout=30,
+                record_history_chains=False,
+            )
+
+    task = asyncio.create_task(waiter_task())
+    await asyncio.sleep(0)
+
+    assert dispatcher.has_active_waiter(event) is True
+
+    await manager.fail(event.unified_msg_origin, RuntimeError("stop waiter"))
+    await asyncio.sleep(0)
+
+    assert dispatcher.has_active_waiter(event) is False
+
+    release_unregister.set()
+    with pytest.raises(RuntimeError, match="stop waiter"):
+        await task
 
 
 async def _noop_waiter(

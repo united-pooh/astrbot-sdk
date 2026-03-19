@@ -223,7 +223,10 @@ class SessionWaiterManager:
             return True
 
     def has_active_waiter(self, event: MessageEvent) -> bool:
-        return event.unified_msg_origin in self._entries
+        entry = self._entries.get(event.unified_msg_origin)
+        if entry is None:
+            return False
+        return not entry.controller.future.done()
 
     def has_waiter(self, event: MessageEvent) -> bool:
         return self.has_active_waiter(event)

@@ -116,12 +116,16 @@ class HandlerDispatcher:
         handler_id = str(message.input.get("handler_id", ""))
         if handler_id == "__sdk_session_waiter__":
             plugin_id = self._plugin_id
+            event_payload = message.input.get("event", {})
             ctx = Context(
-                peer=self._peer, plugin_id=plugin_id, cancel_token=cancel_token
+                peer=self._peer,
+                plugin_id=plugin_id,
+                cancel_token=cancel_token,
+                source_event_payload=event_payload
+                if isinstance(event_payload, dict)
+                else None,
             )
-            event = MessageEvent.from_payload(
-                message.input.get("event", {}), context=ctx
-            )
+            event = MessageEvent.from_payload(event_payload, context=ctx)
             event.bind_reply_handler(self._create_reply_handler(ctx, event))
             task = asyncio.create_task(self._session_waiters.dispatch(event))
             self._active[message.id] = (task, cancel_token)
