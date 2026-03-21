@@ -103,7 +103,9 @@
         persona.get / persona.list / persona.create / persona.update / persona.delete
         conversation.new / conversation.switch / conversation.delete
         conversation.get / conversation.list / conversation.update
-        kb.get / kb.create / kb.delete
+        kb.list / kb.get / kb.create / kb.update / kb.delete / kb.retrieve
+        kb.document.upload / kb.document.list / kb.document.get
+        kb.document.delete / kb.document.refresh
     System (内部使用):
         system.get_data_dir: 获取插件数据目录
         system.text_to_image: 文本转图片
@@ -171,7 +173,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .._invocation_context import current_caller_plugin_id
+from .._internal.invocation_context import current_caller_plugin_id
 from ..errors import AstrBotError
 from ..protocol.descriptors import (
     RESERVED_CAPABILITY_PREFIXES,
@@ -210,6 +212,7 @@ class _RegisteredPlugin:
     llm_tools: dict[str, dict[str, Any]] = field(default_factory=dict)
     active_llm_tools: set[str] = field(default_factory=set)
     agents: dict[str, dict[str, Any]] = field(default_factory=dict)
+    skills: dict[str, dict[str, str]] = field(default_factory=dict)
 
 
 class CapabilityRouter(BuiltinCapabilityRouterMixin):
@@ -217,6 +220,7 @@ class CapabilityRouter(BuiltinCapabilityRouterMixin):
         self._registrations: dict[str, _CapabilityRegistration] = {}
         self.db_store: dict[str, Any] = {}
         self.memory_store: dict[str, dict[str, Any]] = {}
+        self._memory_backends: dict[str, Any] = {}
         self._memory_index: dict[str, dict[str, Any]] = {}
         self._memory_dirty_keys: set[str] = set()
         self._memory_expires_at: dict[str, datetime | None] = {}
@@ -293,6 +297,8 @@ class CapabilityRouter(BuiltinCapabilityRouterMixin):
         self._conversation_store: dict[str, dict[str, Any]] = {}
         self._session_current_conversation_ids: dict[str, str] = {}
         self._kb_store: dict[str, dict[str, Any]] = {}
+        self._kb_document_store: dict[str, dict[str, dict[str, Any]]] = {}
+        self._kb_document_content_store: dict[str, str] = {}
         self._platform_instances: list[dict[str, Any]] = [
             {
                 "id": "mock-platform",

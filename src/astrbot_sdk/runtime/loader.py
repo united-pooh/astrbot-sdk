@@ -68,8 +68,10 @@ from typing import Any, Literal, TypeAlias, cast
 
 import yaml
 
-from .._command_model import resolve_command_model_param
-from .._typing_utils import unwrap_optional
+from .._internal.command_model import resolve_command_model_param
+from .._internal.injected_params import is_framework_injected_parameter
+from .._internal.plugin_ids import validate_plugin_id
+from .._internal.typing_utils import unwrap_optional
 from ..decorators import (
     ConversationMeta,
     LimiterMeta,
@@ -86,7 +88,6 @@ from ..protocol.descriptors import (
     ParamSpec,
     ScheduleTrigger,
 )
-from ..schedule import ScheduleContext
 from ..types import GreedyStr
 from .environment_groups import (
     EnvironmentGroup,
@@ -223,31 +224,7 @@ def _iter_discoverable_names(instance: Any) -> list[str]:
 
 
 def _is_injected_parameter(annotation: Any, parameter_name: str) -> bool:
-    if parameter_name in {
-        "event",
-        "ctx",
-        "context",
-        "sched",
-        "schedule",
-        "conversation",
-        "conv",
-    }:
-        return True
-    normalized, _is_optional = unwrap_optional(annotation)
-    if normalized is None:
-        return False
-    if normalized in {ScheduleContext}:
-        return True
-    if isinstance(normalized, type):
-        from ..context import Context
-        from ..conversation import ConversationSession
-        from ..events import MessageEvent
-
-        return issubclass(
-            normalized,
-            (Context, MessageEvent, ScheduleContext, ConversationSession),
-        )
-    return False
+    return is_framework_injected_parameter(parameter_name, annotation)
 
 
 def _param_type_name(annotation: Any) -> tuple[ParamTypeName, OptionalInnerType, bool]:
@@ -690,6 +667,10 @@ def validate_plugin_spec(plugin: PluginSpec) -> None:
     raw_name = manifest_data.get("name")
     if not isinstance(raw_name, str) or not raw_name:
         raise ValueError(f"{manifest_label} 缺少 name。")
+    try:
+        validate_plugin_id(raw_name)
+    except ValueError as exc:
+        raise ValueError(f"{manifest_label} 的 name 不合法：{exc}") from exc
 
     raw_runtime = manifest_data.get("runtime") or {}
     raw_python = raw_runtime.get("python")
@@ -988,6 +969,7 @@ def load_plugin(plugin: PluginSpec) -> LoadedPlugin:
                             trigger=meta.trigger,
                             kind=cast(HandlerKind, meta.kind),
                             contract=meta.contract,
+                            description=meta.description,
                             priority=meta.priority,
                             permissions=meta.permissions.model_copy(deep=True),
                             filters=[

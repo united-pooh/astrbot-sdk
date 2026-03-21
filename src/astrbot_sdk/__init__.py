@@ -15,8 +15,13 @@ from .clients.managers import (
     ConversationRecord,
     ConversationUpdateParams,
     KnowledgeBaseCreateParams,
+    KnowledgeBaseDocumentRecord,
+    KnowledgeBaseDocumentUploadParams,
     KnowledgeBaseManagerClient,
     KnowledgeBaseRecord,
+    KnowledgeBaseRetrieveResult,
+    KnowledgeBaseRetrieveResultItem,
+    KnowledgeBaseUpdateParams,
     PersonaCreateParams,
     PersonaManagerClient,
     PersonaRecord,
@@ -65,7 +70,7 @@ from .filters import (
     any_of,
     custom_filter,
 )
-from .message_components import (
+from .message.components import (
     At,
     AtAll,
     BaseMessageComponent,
@@ -80,13 +85,13 @@ from .message_components import (
     UnknownComponent,
     Video,
 )
-from .message_result import (
+from .message.result import (
     EventResultType,
     MessageBuilder,
     MessageChain,
     MessageEventResult,
 )
-from .message_session import MessageSession
+from .message.session import MessageSession
 from .plugin_kv import PluginKVStoreMixin
 from .schedule import ScheduleContext
 from .session_waiter import SessionController, session_waiter
@@ -116,8 +121,13 @@ __all__ = [
     "GreedyStr",
     "Image",
     "KnowledgeBaseCreateParams",
+    "KnowledgeBaseDocumentRecord",
+    "KnowledgeBaseDocumentUploadParams",
     "KnowledgeBaseManagerClient",
     "KnowledgeBaseRecord",
+    "KnowledgeBaseRetrieveResult",
+    "KnowledgeBaseRetrieveResultItem",
+    "KnowledgeBaseUpdateParams",
     "ManagedProviderRecord",
     "MediaHelper",
     "MessageEvent",

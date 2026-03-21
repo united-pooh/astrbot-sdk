@@ -19,6 +19,7 @@ Attributes:
     kbs: 知识库管理客户端
     http: HTTP 客户端，用于注册 API 端点
     metadata: 元数据客户端，用于查询插件信息
+    skills: Skill 客户端，用于向 AstrBot 注册插件技能
     plugin_id: 当前插件的唯一标识
     logger: 绑定了插件 ID 的日志器
     cancel_token: 取消令牌，用于处理请求取消
@@ -34,8 +35,8 @@ from typing import Any
 
 from loguru import logger as base_logger
 
-from ._plugin_logger import PluginLogger
-from ._star_runtime import current_star_instance
+from ._internal.plugin_logger import PluginLogger
+from ._internal.star_runtime import current_star_instance
 from .clients import (
     DBClient,
     HTTPClient,
@@ -47,6 +48,7 @@ from .clients import (
     PlatformStats,
     PlatformStatus,
     RegistryClient,
+    SkillClient,
 )
 from .clients._proxy import CapabilityProxy
 from .clients.files import FileServiceClient
@@ -58,12 +60,17 @@ from .clients.managers import (
 )
 from .clients.provider import ProviderClient, ProviderManagerClient
 from .clients.session import SessionPluginManager, SessionServiceManager
+from .clients.skills import SkillRegistration
 from .errors import AstrBotError
 from .llm.entities import LLMToolSpec, ProviderMeta, ProviderRequest
 from .llm.tools import LLMToolManager
-from .message_components import BaseMessageComponent
-from .message_result import MessageChain
-from .message_session import MessageSession
+from .message.components import BaseMessageComponent
+from .message.result import MessageChain
+from .message.session import MessageSession
+from .session_waiter import (
+    _mark_session_waiter_background_task,
+    _unmark_session_waiter_background_task,
+)
 
 PlatformCompatContent = (
     str | MessageChain | Sequence[BaseMessageComponent] | Sequence[dict[str, Any]]
@@ -240,6 +247,7 @@ class Context:
         *,
         peer,
         plugin_id: str,
+        request_id: str | None = None,
         cancel_token: CancelToken | None = None,
         logger: Any | None = None,
         source_event_payload: dict[str, Any] | None = None,
@@ -252,7 +260,11 @@ class Context:
             cancel_token: 取消令牌，None 时创建新令牌
             logger: 日志器，None 时使用默认 logger 并绑定 plugin_id
         """
-        proxy = CapabilityProxy(peer, caller_plugin_id=plugin_id)
+        proxy = CapabilityProxy(
+            peer,
+            caller_plugin_id=plugin_id,
+            request_scope_id=request_id,
+        )
         if isinstance(logger, PluginLogger):
             bound_logger = logger
         else:
@@ -276,6 +288,7 @@ class Context:
         self.http = HTTPClient(proxy)
         self.metadata = MetadataClient(proxy, plugin_id)
         self.registry = RegistryClient(proxy)
+        self.skills = SkillClient(proxy)
         self.session_plugins = SessionPluginManager(proxy)
         self.session_services = SessionServiceManager(proxy)
         self.persona_manager = self.personas
@@ -289,6 +302,7 @@ class Context:
             else PluginLogger(plugin_id=plugin_id, logger=bound_logger)
         )
         self.cancel_token = cancel_token or CancelToken()
+        self.request_id = request_id
         self._source_event_payload = (
             dict(source_event_payload) if isinstance(source_event_payload, dict) else {}
         )
@@ -476,31 +490,24 @@ class Context:
             raise TypeError("register_llm_tool requires parameters_schema dict")
 
         handler_ref = f"__dynamic_llm_tool__:{tool_name}"
+        tool_spec = LLMToolSpec.create(
+            name=tool_name,
+            description=str(desc),
+            parameters_schema=dict(parameters_schema),
+            handler_ref=handler_ref,
+            active=bool(active),
+        )
         owner = getattr(func_obj, "__self__", None) or current_star_instance()
         dispatcher = getattr(self.peer, "_sdk_capability_dispatcher", None)
         if dispatcher is not None and hasattr(dispatcher, "add_dynamic_llm_tool"):
             dispatcher.add_dynamic_llm_tool(
                 plugin_id=self.plugin_id,
-                spec=LLMToolSpec(
-                    name=tool_name,
-                    description=str(desc),
-                    parameters_schema=dict(parameters_schema),
-                    handler_ref=handler_ref,
-                    active=bool(active),
-                ),
+                spec=tool_spec,
                 callable_obj=func_obj,
                 owner=owner,
             )
         try:
-            return await self._llm_tool_manager.add(
-                LLMToolSpec(
-                    name=tool_name,
-                    description=str(desc),
-                    parameters_schema=dict(parameters_schema),
-                    handler_ref=handler_ref,
-                    active=bool(active),
-                )
-            )
+            return await self._llm_tool_manager.add(tool_spec)
         except Exception:
             if dispatcher is not None and hasattr(dispatcher, "remove_llm_tool"):
                 dispatcher.remove_llm_tool(self.plugin_id, tool_name)
@@ -512,6 +519,22 @@ class Context:
         if dispatcher is not None and hasattr(dispatcher, "remove_llm_tool"):
             dispatcher.remove_llm_tool(self.plugin_id, str(name))
         return removed
+
+    async def register_skill(
+        self,
+        *,
+        name: str,
+        path: str | Path,
+        description: str = "",
+    ) -> SkillRegistration:
+        return await self.skills.register(
+            name=name,
+            path=str(path),
+            description=description,
+        )
+
+    async def unregister_skill(self, name: str) -> bool:
+        return await self.skills.unregister(name)
 
     async def tool_loop_agent(
         self,
@@ -565,6 +588,10 @@ class Context:
             raise AstrBotError.invalid_input(
                 "register_commands(ignore_prefix=True) is unsupported in SDK runtime"
             )
+        if isinstance(priority, bool) or not isinstance(priority, int):
+            raise AstrBotError.invalid_input(
+                "register_commands priority must be an integer"
+            )
         await self._proxy.call(
             "registry.command.register",
             {
@@ -572,7 +599,7 @@ class Context:
                 "handler_full_name": str(handler_full_name),
                 "source_event_type": source_event_type,
                 "desc": str(desc),
-                "priority": int(priority),
+                "priority": priority,
                 "use_regex": bool(use_regex),
                 "ignore_prefix": False,
             },
@@ -583,6 +610,20 @@ class Context:
         task: Awaitable[Any],
         desc: str,
     ) -> asyncio.Task[Any]:
+        """Register a background task owned by the current SDK context.
+
+        This is the recommended way to launch follow-up work that should outlive
+        the current handler dispatch, including `session_waiter(...)` flows.
+        Directly awaiting a waiter inside the current handler keeps the original
+        dispatch open until the next message arrives.
+
+        Example:
+            await event.reply("请输入用户名:")
+            await ctx.register_task(
+                self.collect_username(event),
+                "waiter:collect_username",
+            )
+        """
         task_desc = str(desc)
 
         async def _wrap_future(future: asyncio.Future[Any]) -> Any:
@@ -597,7 +638,10 @@ class Context:
         else:
             raise TypeError("register_task requires an awaitable task object")
 
+        _mark_session_waiter_background_task(background_task)
+
         def _on_done(done_task: asyncio.Task[Any]) -> None:
+            _unmark_session_waiter_background_task(done_task)
             if done_task.cancelled():
                 debug_logger = getattr(self.logger, "debug", None)
                 if callable(debug_logger):

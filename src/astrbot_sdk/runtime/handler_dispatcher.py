@@ -31,14 +31,15 @@ from typing import Any, cast, get_type_hints
 
 from loguru import logger
 
-from .._command_model import (
+from .._internal.command_model import (
     parse_command_model_remainder,
     resolve_command_model_param,
 )
-from .._invocation_context import caller_plugin_scope
-from .._plugin_logger import PluginLogger
-from .._star_runtime import bind_star_runtime
-from .._typing_utils import unwrap_optional
+from .._internal.injected_params import legacy_arg_parameter_names
+from .._internal.invocation_context import caller_plugin_scope
+from .._internal.plugin_logger import PluginLogger
+from .._internal.star_runtime import bind_star_runtime
+from .._internal.typing_utils import unwrap_optional
 from ..clients.llm import LLMResponse
 from ..context import CancelToken, Context
 from ..conversation import (
@@ -51,8 +52,8 @@ from ..conversation import (
 from ..events import MessageEvent
 from ..filters import LocalFilterBinding
 from ..llm.entities import ProviderRequest
-from ..message_components import BaseMessageComponent
-from ..message_result import (
+from ..message.components import BaseMessageComponent
+from ..message.result import (
     MessageChain,
     MessageEventResult,
     coerce_message_chain,
@@ -64,7 +65,11 @@ from ..protocol.descriptors import (
     ScheduleTrigger,
 )
 from ..schedule import ScheduleContext
-from ..session_waiter import SessionWaiterManager
+from ..session_waiter import (
+    SessionWaiterManager,
+    _mark_session_waiter_handler_task,
+    _unmark_session_waiter_handler_task,
+)
 from ..star import Star
 from ._command_matching import (
     build_command_args,
@@ -108,18 +113,53 @@ class HandlerDispatcher:
                 "some features may not work as expected"
             )
 
+    def has_active_waiter(self, event: MessageEvent) -> bool:
+        return self._session_waiters.has_active_waiter(event)
+
     async def invoke(self, message, cancel_token: CancelToken) -> dict[str, Any]:
         handler_id = str(message.input.get("handler_id", ""))
         if handler_id == "__sdk_session_waiter__":
-            plugin_id = self._plugin_id
+            event_payload = message.input.get("event", {})
+            requested_plugin_id = str(message.input.get("plugin_id") or "").strip()
             ctx = Context(
-                peer=self._peer, plugin_id=plugin_id, cancel_token=cancel_token
+                peer=self._peer,
+                plugin_id=requested_plugin_id or self._plugin_id,
+                request_id=message.id,
+                cancel_token=cancel_token,
+                source_event_payload=event_payload
+                if isinstance(event_payload, dict)
+                else None,
             )
-            event = MessageEvent.from_payload(
-                message.input.get("event", {}), context=ctx
-            )
+            event = MessageEvent.from_payload(event_payload, context=ctx)
+            session_key = event.unified_msg_origin
+            if requested_plugin_id:
+                plugin_id = requested_plugin_id
+            else:
+                plugin_ids = self._session_waiters.get_waiter_plugin_ids(session_key)
+                if len(plugin_ids) > 1:
+                    raise LookupError(
+                        "multiple active session_waiters found for session; "
+                        "dispatch requires explicit plugin identity"
+                    )
+                plugin_id = plugin_ids[0] if plugin_ids else self._plugin_id
+                if plugin_id != ctx.plugin_id:
+                    ctx = Context(
+                        peer=self._peer,
+                        plugin_id=plugin_id,
+                        request_id=message.id,
+                        cancel_token=cancel_token,
+                        source_event_payload=event_payload
+                        if isinstance(event_payload, dict)
+                        else None,
+                    )
+                    event = MessageEvent.from_payload(event_payload, context=ctx)
             event.bind_reply_handler(self._create_reply_handler(ctx, event))
-            task = asyncio.create_task(self._session_waiters.dispatch(event))
+            with caller_plugin_scope(plugin_id):
+                task = asyncio.create_task(
+                    self._session_waiters.dispatch(event, plugin_id=plugin_id)
+                )
+            _mark_session_waiter_handler_task(task)
+            task.add_done_callback(_unmark_session_waiter_handler_task)
             self._active[message.id] = (task, cancel_token)
             try:
                 return await task
@@ -135,6 +175,7 @@ class HandlerDispatcher:
         ctx = Context(
             peer=self._peer,
             plugin_id=plugin_id,
+            request_id=message.id,
             cancel_token=cancel_token,
             source_event_payload=event_payload
             if isinstance(event_payload, dict)
@@ -172,6 +213,8 @@ class HandlerDispatcher:
                     schedule_context=schedule_context,
                 )
             )
+        _mark_session_waiter_handler_task(task)
+        task.add_done_callback(_unmark_session_waiter_handler_task)
         self._active[message.id] = (task, cancel_token)
         try:
             return await task
@@ -282,6 +325,7 @@ class HandlerDispatcher:
                     self._append_injected_payloads(
                         summary,
                         injected_payloads,
+                        event=event,
                         event_type=event_type,
                     )
                     return summary
@@ -296,6 +340,7 @@ class HandlerDispatcher:
             self._append_injected_payloads(
                 summary,
                 injected_payloads,
+                event=event,
                 event_type=event_type,
             )
             return summary
@@ -332,9 +377,7 @@ class HandlerDispatcher:
                     return build_command_args(
                         [
                             ParamSpec(name=name, type="str")
-                            for name in self._legacy_arg_parameter_names(
-                                loaded.callable
-                            )
+                            for name in legacy_arg_parameter_names(loaded.callable)
                         ],
                         remainder,
                     )
@@ -348,7 +391,7 @@ class HandlerDispatcher:
             return build_regex_args(
                 [
                     ParamSpec(name=name, type="str")
-                    for name in self._legacy_arg_parameter_names(loaded.callable)
+                    for name in legacy_arg_parameter_names(loaded.callable)
                 ],
                 match,
             )
@@ -734,6 +777,7 @@ class HandlerDispatcher:
         summary: dict[str, Any],
         injected_payloads: _InjectedEventPayloads,
         *,
+        event: MessageEvent,
         event_type: str,
     ) -> None:
         if (
@@ -754,6 +798,8 @@ class HandlerDispatcher:
             and injected_payloads.event_result is not None
         ):
             summary["event_result"] = injected_payloads.event_result.to_payload()
+        if event._should_serialize_sdk_local_extras():  # noqa: SLF001
+            summary["sdk_local_extras"] = event._sdk_local_extras_payload()  # noqa: SLF001
 
     def _format_handler_injection_error(
         self,
@@ -920,46 +966,6 @@ class HandlerDispatcher:
             return ScheduleContext.from_payload(event_payload)
         except Exception:
             return None
-
-    @classmethod
-    def _legacy_arg_parameter_names(cls, handler) -> list[str]:
-        try:
-            signature = inspect.signature(handler)
-        except (TypeError, ValueError):
-            return []
-        try:
-            type_hints = get_type_hints(handler)
-        except Exception:
-            type_hints = {}
-        names: list[str] = []
-        for parameter in signature.parameters.values():
-            if parameter.kind not in (
-                inspect.Parameter.POSITIONAL_ONLY,
-                inspect.Parameter.POSITIONAL_OR_KEYWORD,
-            ):
-                continue
-            if cls._is_injected_parameter(
-                parameter.name, type_hints.get(parameter.name)
-            ):
-                continue
-            names.append(parameter.name)
-        return names
-
-    @classmethod
-    def _is_injected_parameter(cls, name: str, annotation: Any) -> bool:
-        if name in {"event", "ctx", "context", "conversation", "conv"}:
-            return True
-        normalized, _is_optional = unwrap_optional(annotation)
-        if normalized is None:
-            return False
-        if normalized in {Context, MessageEvent, ConversationSession}:
-            return True
-        if isinstance(normalized, type) and issubclass(
-            normalized,
-            (Context, MessageEvent, ConversationSession),
-        ):
-            return True
-        return False
 
     async def _handle_error(
         self,
