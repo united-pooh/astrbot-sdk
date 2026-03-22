@@ -1258,7 +1258,11 @@ from astrbot_sdk.message.components import Plain
 **示例**:
 
 ```python
-session = MessageSession.from_str(event.unified_msg_origin)
+session = MessageSession(
+    platform_id=event.platform_id,
+    message_type=event.message_type,
+    session_id=event.session_id,
+)
 page = await ctx.message_history.list(session, limit=20)
 for record in page.records:
     print(record.id, record.sender.sender_name, record.parts)
@@ -1279,6 +1283,11 @@ for record in page.records:
 **示例**:
 
 ```python
+session = MessageSession(
+    platform_id=event.platform_id,
+    message_type=event.message_type,
+    session_id=event.session_id,
+)
 record = await ctx.message_history.get(session, 1)
 same_record = await ctx.message_history.get_by_id(session, 1)
 ```
@@ -1301,7 +1310,11 @@ same_record = await ctx.message_history.get_by_id(session, 1)
 **示例**:
 
 ```python
-session = MessageSession.from_str(event.unified_msg_origin)
+session = MessageSession(
+    platform_id=event.platform_id,
+    message_type=event.message_type,
+    session_id=event.session_id,
+)
 record = await ctx.message_history.append(
     session,
     parts=[Plain(event.message_content, convert=False)],

@@ -606,7 +606,11 @@ if result:
 ```python
 from astrbot_sdk import MessageHistorySender, MessageSession, Plain
 
-session = MessageSession.from_str(event.unified_msg_origin)
+session = MessageSession(
+    platform_id=event.platform_id,
+    message_type=event.message_type,
+    session_id=event.session_id,
+)
 record = await ctx.message_history.append(
     session,
     parts=[Plain(event.message_content, convert=False)],
@@ -626,7 +630,11 @@ print(record.id, record.created_at)
 分页时建议直接复用上一页返回的 `next_cursor`，不要自行构造游标值。
 
 ```python
-session = MessageSession.from_str(event.unified_msg_origin)
+session = MessageSession(
+    platform_id=event.platform_id,
+    message_type=event.message_type,
+    session_id=event.session_id,
+)
 page = await ctx.message_history.list(session, limit=20)
 for record in page.records:
     print(record.id, record.sender.sender_name, record.parts)
@@ -637,7 +645,11 @@ for record in page.records:
 按记录 ID 读取单条历史。
 
 ```python
-session = MessageSession.from_str(event.unified_msg_origin)
+session = MessageSession(
+    platform_id=event.platform_id,
+    message_type=event.message_type,
+    session_id=event.session_id,
+)
 record = await ctx.message_history.get(session, 1)
 same_record = await ctx.message_history.get_by_id(session, 1)
 ```
@@ -650,7 +662,11 @@ same_record = await ctx.message_history.get_by_id(session, 1)
 ```python
 from datetime import datetime, timezone
 
-session = MessageSession.from_str(event.unified_msg_origin)
+session = MessageSession(
+    platform_id=event.platform_id,
+    message_type=event.message_type,
+    session_id=event.session_id,
+)
 deleted = await ctx.message_history.delete_before(
     session,
     before=datetime(2026, 3, 22, tzinfo=timezone.utc),

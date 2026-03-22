@@ -207,7 +207,11 @@ results = await ctx.memory.search("用户喜欢什么颜色")
 # Message History（保存原始消息链和发送者）
 from astrbot_sdk import MessageHistorySender, MessageSession, Plain
 
-session = MessageSession.from_str(event.unified_msg_origin)
+session = MessageSession(
+    platform_id=event.platform_id,
+    message_type=event.message_type,
+    session_id=event.session_id,
+)
 await ctx.message_history.append(
     session,
     parts=[Plain(event.message_content, convert=False)],
