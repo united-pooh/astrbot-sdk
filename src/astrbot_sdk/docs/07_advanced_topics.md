@@ -443,6 +443,7 @@ class MyPlugin(Star):
 ### 1. ProviderManagerClient
 
 `ctx.provider_manager` 仅适用于 `reserved/system` 插件。普通插件应使用 `ctx.providers` 查询当前 Provider，而不是调用 Provider 管理能力。
+此外，`set_provider()` 修改的是全局生效的 Provider 选择，不是单个会话的局部设置。
 
 ```python
 from astrbot_sdk import MessageEvent, Star, Context

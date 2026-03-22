@@ -405,7 +405,8 @@ if provider:
 
 ### set_provider()
 
-切换指定会话正在使用的 Provider。
+切换当前全局生效的 Provider。
+`umo` 仅作为变更事件中的来源标识，不会把 Provider 绑定到单个会话。
 
 ```python
 from astrbot_sdk.llm.entities import ProviderType
@@ -563,10 +564,10 @@ kb = await ctx.kbs.create_kb(
 )
 
 kb = await ctx.kbs.update_kb(
-    "tech_docs",
+    kb.kb_id,
     KnowledgeBaseUpdateParams(description="更新后的描述"),
 )
-deleted = await ctx.kbs.delete_kb("tech_docs")
+deleted = await ctx.kbs.delete_kb(kb.kb_id)
 ```
 
 ### retrieve()

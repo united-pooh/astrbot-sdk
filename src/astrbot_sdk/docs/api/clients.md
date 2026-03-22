@@ -1038,7 +1038,8 @@ from astrbot_sdk.clients import ProviderManagerClient
 
 #### `set_provider(provider_id, provider_type, umo=None)`
 
-设置当前使用的 Provider。
+设置当前全局生效的 Provider。
+`umo` 只会出现在变更事件中，不会让 Provider 选择按会话隔离。
 
 **参数**:
 - `provider_id` (`str`): Provider ID
@@ -1233,11 +1234,14 @@ from astrbot_sdk.clients import KnowledgeBaseManagerClient
 
 获取知识库。
 
+参数 `kb_id` 是知识库的唯一 ID，不是 `kb_name`。
+
 ---
 
 #### `create_kb(params)`
 
 创建新知识库。
+返回的 `KnowledgeBaseRecord` 中包含运行时生成的 `kb_id`，后续更新、删除和文档操作都应使用这个 `kb_id`。
 
 ---
 

@@ -514,7 +514,8 @@ stt_providers = await ctx.providers.list_stt()
 
 ##### `set_provider()`
 
-设置当前使用的 Provider。
+设置当前全局生效的 Provider。
+`umo` 只会作为变更事件里的来源标识，不会把 Provider 选择限定到单个会话。
 
 ```python
 from astrbot_sdk.llm.entities import ProviderType
@@ -721,7 +722,7 @@ await ctx.conversations.update_conversation(
 获取知识库。
 
 ```python
-kb = await ctx.kbs.get_kb("my_kb")
+kb = await ctx.kbs.get_kb("kb_123")
 if kb:
     print(f"知识库: {kb.kb_name}")
     print(f"文档数: {kb.doc_count}")
@@ -747,7 +748,7 @@ kb = await ctx.kbs.create_kb(KnowledgeBaseCreateParams(
 删除知识库。
 
 ```python
-deleted = await ctx.kbs.delete_kb("my_kb")
+deleted = await ctx.kbs.delete_kb("kb_123")
 if deleted:
     print("知识库已删除")
 ```
