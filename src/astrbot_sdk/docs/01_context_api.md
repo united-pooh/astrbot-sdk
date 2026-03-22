@@ -551,7 +551,7 @@ await ctx.conversations.delete_conversation(event.session_id, "conv_123")
 
 ```python
 kbs = await ctx.kbs.list_kbs()
-kb = await ctx.kbs.get_kb("tech_docs")
+kb = await ctx.kbs.get_kb("kb_123")
 ```
 
 ### create_kb() / update_kb() / delete_kb()
