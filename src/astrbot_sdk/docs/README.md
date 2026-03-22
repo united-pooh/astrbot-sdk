@@ -27,7 +27,7 @@
 适合需要深入了解 SDK 架构和完整 API 的开发者：
 
 - **[09. 完整 API 索引](./09_api_reference.md)** - 所有导出类和函数的完整参考
-- **[客户端 API 详细参考](./api/clients.md)** - 16 个客户端与管理器的完整签名、返回值和示例
+- **[客户端 API 详细参考](./api/clients.md)** - 17 个客户端与管理器的完整签名、返回值和示例
 - **[10. 迁移指南](./10_migration_guide.md)** - 从旧版本或其他框架迁移
 - **[11. 安全检查清单](./11_security_checklist.md)** - 安全开发检查清单和已知问题
 
@@ -196,13 +196,26 @@ async for chunk in ctx.llm.stream_chat("讲个故事"):
 ### 2. 数据持久化
 
 ```python
-# DB 客户端（精确匹配）
+# DB 客户端（精确匹配，键空间按插件隔离）
 await ctx.db.set("user:123", {"name": "Alice"})
 data = await ctx.db.get("user:123")
 
 # Memory 客户端（语义搜索）
 await ctx.memory.save("user_pref", {"theme": "dark"})
 results = await ctx.memory.search("用户喜欢什么颜色")
+
+# Message History（保存原始消息链和发送者）
+from astrbot_sdk import MessageHistorySender, MessageSession, Plain
+
+session = MessageSession.from_str(event.unified_msg_origin)
+await ctx.message_history.append(
+    session,
+    parts=[Plain(event.message_content, convert=False)],
+    sender=MessageHistorySender(
+        sender_id=event.sender_id,
+        sender_name=event.sender_name,
+    ),
+)
 ```
 
 ### 3. 消息发送
@@ -268,7 +281,7 @@ async def handle_api(request_id: str, payload: dict, cancel_token):
     return {"status": 200, "body": {"result": "ok"}}
 
 await ctx.http.register_api(
-    route="/my-api",
+    route="/my-api",  # 建议使用规范化路径，避免 .. 和重复斜杠
     handler=handle_api,
     methods=["GET", "POST"]
 )

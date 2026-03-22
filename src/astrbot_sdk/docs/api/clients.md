@@ -21,6 +21,7 @@
 - [ProviderManagerClient - Provider 管理客户端](#providermanagerclient---provider-管理客户端)
 - [PersonaManagerClient - 人格管理客户端](#personamanagerclient---人格管理客户端)
 - [ConversationManagerClient - 对话管理客户端](#conversationmanagerclient---对话管理客户端)
+- [MessageHistoryManagerClient - 消息历史管理客户端](#messagehistorymanagerclient---消息历史管理客户端)
 - [KnowledgeBaseManagerClient - 知识库管理客户端](#knowledgebasemanagerclient---知识库管理客户端)
 - [RegistryClient - Handler 注册表客户端](#registryclient---handler-注册表客户端)
 - [SkillClient - 技能注册客户端](#skillclient---技能注册客户端)
@@ -136,7 +137,8 @@ async for chunk in ctx.llm.stream_chat("写一篇文章"):
 
 ## MemoryClient - 记忆存储客户端
 
-提供 AI 记忆的存储和检索能力，支持语义搜索。与 DBClient 不同，MemoryClient 使用向量相似度进行语义匹配。
+提供 AI 记忆的存储和检索能力，支持语义搜索。与 DBClient 和 MessageHistoryManagerClient 不同，
+MemoryClient 主要用于可检索的 AI 上下文，而不是精确保存原始消息记录。
 
 ### 导入
 
@@ -348,7 +350,7 @@ if 'dirty_items' in stats:
 
 ## DBClient - KV 数据库客户端
 
-提供键值存储能力，用于持久化插件数据。数据永久保存直到显式删除。
+提供键值存储能力，用于持久化插件数据。数据永久保存直到显式删除，且运行时会自动对 key 做插件级命名空间隔离。
 
 ### 导入
 
@@ -426,6 +428,8 @@ await ctx.db.delete("user_settings")
 
 **返回**: `list[str]` - 匹配的键名列表
 
+返回的 key 是当前插件视角的原始 key，不包含运行时内部命名空间前缀。
+
 **示例**:
 
 ```python
@@ -499,6 +503,8 @@ await ctx.db.set_many([
 **返回**: 异步迭代器，产生变更事件
 
 **事件格式**: `{"op": "set"|"delete", "key": str, "value": Any|None}`
+
+事件中的 `key` 也是当前插件视角的原始 key。
 
 **示例**:
 
@@ -771,7 +777,7 @@ from astrbot_sdk.clients import HTTPClient
 注册 Web API 端点。
 
 **参数**:
-- `route` (`str`): API 路由路径
+- `route` (`str`): API 路由路径。当前实现会拦截包含 `..` 的路径和部分明显非法输入；建议使用以 `/` 开头、没有重复斜杠的规范化路径
 - `handler_capability` (`str | None`): 处理此路由的 capability 名称
 - `handler` (`Any | None`): 使用 `@provide_capability` 标记的方法引用
 - `methods` (`list[str] | None`): HTTP 方法列表
@@ -814,7 +820,7 @@ await ctx.http.register_api(
 
 **参数**:
 - `route` (`str`): API 路由路径
-- `methods` (`list[str] | None`): HTTP 方法列表
+- `methods` (`list[str] | None`): HTTP 方法列表，`None` 表示移除当前插件在该 route 下注册的全部方法
 
 **示例**:
 
@@ -1218,6 +1224,140 @@ from astrbot_sdk.clients import ConversationManagerClient
 
 ---
 
+## MessageHistoryManagerClient - 消息历史管理客户端
+
+按 `MessageSession` 精确保存原始消息组件、发送者和元数据。适合审计、回溯、分页读取和按时间清理。
+如果要做语义召回或向量检索，请继续使用 `MemoryClient`。
+
+### 导入
+
+```python
+from astrbot_sdk.clients import (
+    MessageHistoryManagerClient,
+    MessageHistoryPage,
+    MessageHistoryRecord,
+    MessageHistorySender,
+)
+from astrbot_sdk.message.session import MessageSession
+from astrbot_sdk.message.components import Plain
+```
+
+### 方法
+
+#### `list(session, *, cursor=None, limit=50)`
+
+分页列出某个会话的消息历史。
+
+**参数**:
+- `session` (`MessageSession`): 目标会话，必须是 `MessageSession`
+- `cursor` (`str | None`): 分页游标，建议直接使用上一页返回的 `next_cursor`
+- `limit` (`int`): 返回条数，默认 `50`
+
+**返回**: `MessageHistoryPage` - 包含 `records`、`next_cursor`、`total`
+
+**示例**:
+
+```python
+session = MessageSession.from_str(event.unified_msg_origin)
+page = await ctx.message_history.list(session, limit=20)
+for record in page.records:
+    print(record.id, record.sender.sender_name, record.parts)
+```
+
+---
+
+#### `get(session, record_id)` / `get_by_id(session, record_id)`
+
+按记录 ID 读取单条消息历史。
+
+**参数**:
+- `session` (`MessageSession`): 目标会话
+- `record_id` (`int`): 记录 ID
+
+**返回**: `MessageHistoryRecord | None`
+
+**示例**:
+
+```python
+record = await ctx.message_history.get(session, 1)
+same_record = await ctx.message_history.get_by_id(session, 1)
+```
+
+---
+
+#### `append(session, *, parts, sender, metadata=None, idempotency_key=None)`
+
+追加一条消息历史记录。
+
+**参数**:
+- `session` (`MessageSession`): 目标会话
+- `parts` (`list[BaseMessageComponent]`): 原始消息组件列表
+- `sender` (`MessageHistorySender`): 发送者信息，也可传可验证为该模型的 `dict`
+- `metadata` (`dict[str, Any] | None`): 附加元数据
+- `idempotency_key` (`str | None`): 幂等键；相同 key 会返回现有记录而不是重复写入
+
+**返回**: `MessageHistoryRecord`
+
+**示例**:
+
+```python
+session = MessageSession.from_str(event.unified_msg_origin)
+record = await ctx.message_history.append(
+    session,
+    parts=[Plain(event.message_content, convert=False)],
+    sender=MessageHistorySender(
+        sender_id=event.sender_id,
+        sender_name=event.sender_name,
+    ),
+    metadata={"source": "handler"},
+    idempotency_key="incoming:demo-user:hello",
+)
+print(record.created_at, record.idempotency_key)
+```
+
+---
+
+#### `delete_before(session, *, before)` / `delete_after(session, *, after)`
+
+按时间边界删除某个会话内的消息历史。
+
+**参数**:
+- `session` (`MessageSession`): 目标会话
+- `before` / `after` (`datetime`): 时间边界，建议使用带时区的 `datetime`
+
+**返回**: `int` - 删除的记录数
+
+**示例**:
+
+```python
+from datetime import datetime, timezone
+
+deleted = await ctx.message_history.delete_before(
+    session,
+    before=datetime(2026, 3, 22, tzinfo=timezone.utc),
+)
+```
+
+---
+
+#### `delete_all(session)`
+
+删除某个会话的全部消息历史。
+
+**参数**:
+- `session` (`MessageSession`): 目标会话
+
+**返回**: `int` - 删除的记录数
+
+**示例**:
+
+```python
+deleted = await ctx.message_history.delete_all(session)
+print(f"deleted={deleted}")
+```
+
+---
+
 ## KnowledgeBaseManagerClient - 知识库管理客户端
 
 提供知识库的创建、查询和删除能力。
@@ -1616,6 +1756,8 @@ async def handle_message(event: MessageEvent, ctx: Context):
     await ctx.platform.send(event.session_id, reply)
 ```
 
+如果你需要保留原始消息组件、发送者和按时间清理能力，应优先使用 `ctx.message_history`。
+
 ### 使用数据库持久化
 
 ```python
@@ -1639,9 +1781,11 @@ async def handle_message(event: MessageEvent, ctx: Context):
 
 1. 所有客户端方法都是异步的，需要使用 `await`
 2. 远程调用可能失败，建议使用 try-except 处理
-3. Memory 适合语义搜索，DB 适合精确匹配
-4. 文件操作使用 file service 注册令牌
-5. 平台标识使用 UMO 格式：`"platform:instance:session_id"`
+3. Memory 适合语义搜索，DB 适合结构化 KV，MessageHistory 适合精确保存原始消息记录
+4. DB key 在运行时按插件隔离；`list()` 和 `watch()` 返回插件本地 key 视图
+5. `HTTPClient.register_api()` 当前会拦截 `..` 等明显非法路径，但仍建议插件自行使用规范化 route；`unregister_api(route)` 默认移除该 route 下全部方法
+6. 文件操作使用 file service 注册令牌
+7. 平台标识使用 UMO 格式：`"platform:instance:session_id"`
 
 ---
 

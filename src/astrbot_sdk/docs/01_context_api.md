@@ -18,6 +18,7 @@
 - [Personas 客户端 (ctx.personas / ctx.persona_manager)](#personas-客户端)
 - [Conversations 客户端 (ctx.conversations / ctx.conversation_manager)](#conversations-客户端)
 - [Knowledge Base 客户端 (ctx.kbs / ctx.kb_manager)](#knowledge-base-客户端)
+- [Message History 客户端 (ctx.message_history / ctx.message_history_manager)](#message-history-客户端)
 - [HTTP 客户端 (ctx.http)](#http-客户端)
 - [Metadata 客户端 (ctx.metadata)](#metadata-客户端)
 - [Registry 客户端 (ctx.registry)](#registry-客户端)
@@ -54,6 +55,8 @@ ctx.provider_manager: ProviderManagerClient  # Provider 管理客户端
 ctx.personas: PersonaManagerClient    # 人格管理客户端
 ctx.conversations: ConversationManagerClient  # 对话管理客户端
 ctx.kbs: KnowledgeBaseManagerClient   # 知识库管理客户端
+ctx.message_history: MessageHistoryManagerClient  # 消息历史管理客户端
+ctx.message_history_manager: MessageHistoryManagerClient  # ctx.message_history 的别名
 ctx.http: HTTPClient                  # HTTP 客户端
 ctx.metadata: MetadataClient          # 元数据客户端
 ctx.registry: RegistryClient          # 能力注册客户端
@@ -231,6 +234,9 @@ print(stats["total_items"], stats.get("embedded_items"), stats.get("dirty_items"
 ---
 
 ## Database 客户端
+
+`ctx.db` 是插件作用域的 KV 存储。运行时会自动为 key 加上当前插件命名空间前缀，
+因此不同插件即使使用同名 key 也不会互相覆盖；`list()` 和 `watch()` 返回的仍是插件视角的原始 key。
 
 ### get()
 
@@ -587,7 +593,78 @@ if result:
 
 ---
 
+## Message History 客户端
+
+`ctx.message_history` 用于按 `MessageSession` 精确保存原始消息组件、发送者和元数据，
+`ctx.message_history_manager` 是它的别名。它适合消息审计、分页回看和按时间清理；
+如果你要做语义检索，仍应使用 `ctx.memory`。
+
+### append()
+
+追加一条消息历史记录。
+
+```python
+from astrbot_sdk import MessageHistorySender, MessageSession, Plain
+
+session = MessageSession.from_str(event.unified_msg_origin)
+record = await ctx.message_history.append(
+    session,
+    parts=[Plain(event.message_content, convert=False)],
+    sender=MessageHistorySender(
+        sender_id=event.sender_id,
+        sender_name=event.sender_name,
+    ),
+    metadata={"source": "message_handler"},
+    idempotency_key="incoming:demo-user:hello",
+)
+print(record.id, record.created_at)
+```
+
+### list()
+
+分页读取某个会话的消息历史。
+分页时建议直接复用上一页返回的 `next_cursor`，不要自行构造游标值。
+
+```python
+session = MessageSession.from_str(event.unified_msg_origin)
+page = await ctx.message_history.list(session, limit=20)
+for record in page.records:
+    print(record.id, record.sender.sender_name, record.parts)
+```
+
+### get() / get_by_id()
+
+按记录 ID 读取单条历史。
+
+```python
+session = MessageSession.from_str(event.unified_msg_origin)
+record = await ctx.message_history.get(session, 1)
+same_record = await ctx.message_history.get_by_id(session, 1)
+```
+
+### delete_before() / delete_after() / delete_all()
+
+按时间或按会话清理消息历史。
+当前实现要求传入带时区的 `datetime`，例如 `timezone.utc`。
+
+```python
+from datetime import datetime, timezone
+
+session = MessageSession.from_str(event.unified_msg_origin)
+deleted = await ctx.message_history.delete_before(
+    session,
+    before=datetime(2026, 3, 22, tzinfo=timezone.utc),
+)
+await ctx.message_history.delete_all(session)
+```
+
+---
+
 ## HTTP 客户端
+
+`ctx.http.register_api()` 当前会拦截包含 `..` 的路径和部分明显非法输入，但校验并非完全严格。
+文档示例建议统一使用以 `/` 开头、没有重复斜杠的规范化路径。`ctx.http.unregister_api(route)`
+在不传 `methods` 时会移除当前插件在该路由下注册的全部方法。
 
 ### register_api()
 
@@ -969,6 +1046,9 @@ async def handle_message(event: MessageEvent, ctx: Context):
 
     await ctx.platform.send(event.session_id, reply)
 ```
+
+如果你需要保留原始消息组件、发送者信息、分页读取或按时间清理，请改用
+`ctx.message_history`，不要把消息链序列化后再手工塞进 `ctx.memory`。
 
 ### 3. 使用数据库持久化
 

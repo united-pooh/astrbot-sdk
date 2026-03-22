@@ -30,6 +30,7 @@ class Context:
     personas: PersonaManagerClient    # 人格管理客户端
     conversations: ConversationManagerClient  # 对话管理客户端
     kbs: KnowledgeBaseManagerClient   # 知识库管理客户端
+    message_history: MessageHistoryManagerClient  # 消息历史管理客户端
     http: HTTPClient                  # HTTP 客户端
     metadata: MetadataClient          # 元数据客户端
     registry: RegistryClient          # handler 注册表客户端
@@ -45,6 +46,7 @@ class Context:
     persona_manager = personas
     conversation_manager = conversations
     kb_manager = kbs
+    message_history_manager = message_history
 ```
 
 ---
@@ -291,7 +293,8 @@ print(stats["total_items"], stats.get("embedded_items"), stats.get("dirty_items"
 
 ### 3. DB 客户端 (ctx.db)
 
-提供键值存储能力，数据永久保存。
+提供键值存储能力，数据永久保存。运行时会自动把 key 限定在当前插件命名空间中；
+`list()` 与 `watch()` 返回的仍是插件视角的原始 key。
 
 ```python
 # 类型: DBClient
@@ -755,6 +758,67 @@ if deleted:
 
 ---
 
+### 10.5 Message History 客户端 (ctx.message_history / ctx.message_history_manager)
+
+提供精确消息历史存储能力，按 `MessageSession` 保存原始消息组件、发送者和元数据。
+
+```python
+# 类型: MessageHistoryManagerClient
+```
+
+#### 方法
+
+##### `append()`
+
+```python
+from astrbot_sdk import MessageHistorySender, MessageSession, Plain
+
+session = MessageSession.from_str(event.unified_msg_origin)
+record = await ctx.message_history.append(
+    session,
+    parts=[Plain(event.message_content, convert=False)],
+    sender=MessageHistorySender(
+        sender_id=event.sender_id,
+        sender_name=event.sender_name,
+    ),
+    metadata={"source": "message_handler"},
+)
+```
+
+##### `list()`
+
+```python
+session = MessageSession.from_str(event.unified_msg_origin)
+page = await ctx.message_history.list(session, limit=20)
+for record in page.records:
+    print(record.id, record.sender.sender_name)
+```
+
+分页时建议直接复用上一页返回的 `next_cursor`，不要自行构造游标值。
+
+##### `get() / get_by_id()`
+
+```python
+record = await ctx.message_history.get(session, 1)
+same_record = await ctx.message_history.get_by_id(session, 1)
+```
+
+##### `delete_before() / delete_after() / delete_all()`
+
+```python
+from datetime import datetime, timezone
+
+await ctx.message_history.delete_before(
+    session,
+    before=datetime(2026, 3, 22, tzinfo=timezone.utc),
+)
+await ctx.message_history.delete_all(session)
+```
+
+当前实现要求传入带时区的 `datetime`，例如 `timezone.utc`。
+
+---
+
 ### 11. HTTP 客户端 (ctx.http)
 
 提供 Web API 注册能力。
@@ -762,6 +826,10 @@ if deleted:
 ```python
 # 类型: HTTPClient
 ```
+
+当前实现会拦截包含 `..` 的路径和部分明显非法输入，但路由校验并非完全严格。
+文档示例建议统一使用以 `/` 开头、没有重复斜杠的规范化路径。`unregister_api(route)` 在不传
+`methods` 时会移除当前插件在该 route 下注册的全部方法。
 
 #### 方法
 
@@ -1463,6 +1531,8 @@ async def handle_message(event: MessageEvent, ctx: Context):
     await ctx.platform.send(event.session_id, reply)
 ```
 
+如果你需要保留原始消息组件、发送者和分页删除能力，应优先使用 `ctx.message_history`。
+
 ---
 
 ### 3. 使用数据库持久化
@@ -1518,15 +1588,20 @@ async def setup_api(event: MessageEvent, ctx: Context):
 
 4. **错误处理**: 所有远程调用都可能失败，建议使用 try-except 处理
 
-5. **Memory vs DB**:
+5. **Memory vs DB vs MessageHistory**:
    - Memory: 语义搜索，适合 AI 上下文
    - DB: 精确匹配，适合结构化数据
+   - MessageHistory: 精确保存消息组件、发送者和元数据
 
-6. **文件操作**: 使用 `ctx.files` 注册文件令牌，不要直接传递本地路径
+6. **DB 作用域**: `ctx.db` 的 key 会自动限制在当前插件命名空间中
 
-7. **平台标识**: 使用 UMO（统一消息来源标识）格式：`"platform:instance:session_id"`
+7. **HTTP 路由**: `ctx.http.register_api()` 当前会拦截 `..` 等明显非法路径，但仍建议插件自行使用规范化 route
 
-8. **配置访问**: `get_plugin_config()` 只支持查询当前插件自己的配置
+8. **文件操作**: 使用 `ctx.files` 注册文件令牌，不要直接传递本地路径
+
+9. **平台标识**: 使用 UMO（统一消息来源标识）格式：`"platform:instance:session_id"`
+
+10. **配置访问**: `get_plugin_config()` 只支持查询当前插件自己的配置
 
 ---
 
@@ -1535,6 +1610,7 @@ async def setup_api(event: MessageEvent, ctx: Context):
 - **LLM 客户端**: `astrbot_sdk.clients.llm.LLMClient`
 - **Memory 客户端**: `astrbot_sdk.clients.memory.MemoryClient`
 - **DB 客户端**: `astrbot_sdk.clients.db.DBClient`
+- **Message History 客户端**: `astrbot_sdk.clients.managers.MessageHistoryManagerClient`
 - **Platform 客户端**: `astrbot_sdk.clients.platform.PlatformClient`
 - **日志器**: `astrbot_sdk._internal.plugin_logger.PluginLogger`
 - **取消令牌**: `astrbot_sdk.context.CancelToken`
