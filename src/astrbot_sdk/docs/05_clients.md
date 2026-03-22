@@ -1,8 +1,8 @@
-# AstrBot SDK 客户端 API 参考文档
+# AstrBot SDK 常用客户端速查
 
 ## 概述
 
-本文档详细介绍 `astrbot_sdk/clients/` 目录下所有客户端的 API，包括方法签名、使用示例和注意事项。
+本文档聚焦插件开发中最常用的客户端与使用模式，方便快速查阅。完整的方法签名、返回类型和全部客户端/管理器列表请查看 [API 详细参考](./api/clients.md)。
 
 ## 目录
 
@@ -13,6 +13,7 @@
 - [FileServiceClient - 文件服务客户端](#5-fileserviceclient---文件服务客户端)
 - [HTTPClient - HTTP API 客户端](#6-httpclient---http-api-客户端)
 - [MetadataClient - 插件元数据客户端](#7-metadataclient---插件元数据客户端)
+- [其他客户端与管理器](#8-其他客户端与管理器)
 
 ---
 
@@ -360,6 +361,22 @@ current = await ctx.metadata.get_current_plugin()
 config = await ctx.metadata.get_plugin_config()
 api_key = config.get("api_key")
 ```
+
+---
+
+## 8. 其他客户端与管理器
+
+下列客户端也属于 `Context` 的公开能力入口。这里给出用途和详细参考入口，避免常用速查页与完整 API 文档重复维护。
+
+- [ProviderClient](./api/clients.md#providerclient---provider-发现客户端): 查询当前可用 Provider，以及当前会话正在使用的 chat / tts / stt Provider。
+- [ProviderManagerClient](./api/clients.md#providermanagerclient---provider-管理客户端): 动态创建、切换、更新、删除 Provider，并监听 Provider 变更。
+- [PersonaManagerClient](./api/clients.md#personamanagerclient---人格管理客户端): 管理人格模板；在 `Context` 中可通过 `ctx.personas` 或 `ctx.persona_manager` 访问。
+- [ConversationManagerClient](./api/clients.md#conversationmanagerclient---对话管理客户端): 管理会话内的多轮对话；在 `Context` 中可通过 `ctx.conversations` 或 `ctx.conversation_manager` 访问。
+- [KnowledgeBaseManagerClient](./api/clients.md#knowledgebasemanagerclient---知识库管理客户端): 管理知识库、文档和检索；在 `Context` 中可通过 `ctx.kbs` 或 `ctx.kb_manager` 访问。
+- [RegistryClient](./api/clients.md#registryclient---handler-注册表客户端): 查询 handler 元数据，并管理 handler 白名单。
+- [SkillClient](./api/clients.md#skillclient---技能注册客户端): 在运行时注册、注销和列出插件技能目录。
+- [SessionPluginManager](./api/clients.md#sessionpluginmanager---会话插件管理器): 按会话检查插件启用状态并过滤 handler。
+- [SessionServiceManager](./api/clients.md#sessionservicemanager---会话服务管理器): 按会话控制 LLM/TTS 是否启用。
 
 ---
 

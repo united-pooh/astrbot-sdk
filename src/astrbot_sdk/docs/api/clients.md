@@ -22,6 +22,10 @@
 - [PersonaManagerClient - 人格管理客户端](#personamanagerclient---人格管理客户端)
 - [ConversationManagerClient - 对话管理客户端](#conversationmanagerclient---对话管理客户端)
 - [KnowledgeBaseManagerClient - 知识库管理客户端](#knowledgebasemanagerclient---知识库管理客户端)
+- [RegistryClient - Handler 注册表客户端](#registryclient---handler-注册表客户端)
+- [SkillClient - 技能注册客户端](#skillclient---技能注册客户端)
+- [SessionPluginManager - 会话插件管理器](#sessionpluginmanager---会话插件管理器)
+- [SessionServiceManager - 会话服务管理器](#sessionservicemanager---会话服务管理器)
 
 ---
 
@@ -1022,6 +1026,7 @@ for p in providers:
 ## ProviderManagerClient - Provider 管理客户端
 
 提供 Provider 的动态管理能力。
+仅 `reserved/system` 插件可用。普通插件调用这些方法会收到 `provider.manager.* is restricted to reserved/system plugins` 错误；普通插件应优先使用 `ProviderClient` 进行只读查询。
 
 ### 导入
 
@@ -1040,6 +1045,18 @@ from astrbot_sdk.clients import ProviderManagerClient
 - `provider_type` (`ProviderType | str`): Provider 类型
 - `umo` (`str | None`): 统一消息来源标识
 
+**示例**:
+
+```python
+from astrbot_sdk.llm.entities import ProviderType
+
+await ctx.provider_manager.set_provider(
+    "my_provider",
+    ProviderType.CHAT_COMPLETION,
+    umo=event.session_id,
+)
+```
+
 ---
 
 #### `get_provider_by_id(provider_id)`
@@ -1057,6 +1074,19 @@ from astrbot_sdk.clients import ProviderManagerClient
 #### `create_provider(provider_config)`
 
 创建新 Provider。
+
+`provider_config` 至少应包含 `id`、`type` 和 `provider_type`。例如：
+
+```python
+record = await ctx.provider_manager.create_provider(
+    {
+        "id": "my_provider",
+        "type": "openai",
+        "provider_type": "chat_completion",
+        "model": "gpt-4",
+    }
+)
+```
 
 ---
 
@@ -1217,6 +1247,340 @@ from astrbot_sdk.clients import KnowledgeBaseManagerClient
 
 ---
 
+## RegistryClient - Handler 注册表客户端
+
+handler 注册表查询与白名单管理客户端，用于查询 handler 信息并管理 handler 白名单。
+
+### 导入
+
+```python
+from astrbot_sdk.clients import RegistryClient, HandlerMetadata
+```
+
+### 方法
+
+#### `get_handlers_by_event_type(event_type)`
+
+获取指定事件类型的所有 handler。
+
+**参数**:
+- `event_type` (`str`): 事件类型
+
+**返回**: `list[HandlerMetadata]`
+
+**示例**:
+
+```python
+handlers = await ctx.registry.get_handlers_by_event_type("message")
+for h in handlers:
+    print(f"{h.handler_full_name}: {h.description}")
+```
+
+---
+
+#### `get_handler_by_full_name(full_name)`
+
+通过完整名称获取 handler 元数据。
+
+**参数**:
+- `full_name` (`str`): handler 完整名称（格式：`plugin_name.handler_name`）
+
+**返回**: `HandlerMetadata | None`
+
+**示例**:
+
+```python
+handler = await ctx.registry.get_handler_by_full_name("my_plugin.on_message")
+if handler:
+    print(f"触发类型: {handler.trigger_type}")
+    print(f"优先级: {handler.priority}")
+    print(f"需要管理员: {handler.require_admin}")
+```
+
+---
+
+#### `set_handler_whitelist(plugin_names)`
+
+设置 handler 白名单。
+
+**参数**:
+- `plugin_names` (`list[str] | set[str] | None`): 插件名称列表，None 表示清除白名单
+
+**返回**: `list[str] | None` - 实际设置的白名单
+
+**示例**:
+
+```python
+# 设置白名单
+await ctx.registry.set_handler_whitelist(["plugin_a", "plugin_b"])
+
+# 清空白名单
+await ctx.registry.set_handler_whitelist(None)
+```
+
+---
+
+#### `get_handler_whitelist()`
+
+获取当前 handler 白名单。
+
+**返回**: `list[str] | None`
+
+**示例**:
+
+```python
+whitelist = await ctx.registry.get_handler_whitelist()
+if whitelist:
+    print(f"当前白名单: {whitelist}")
+```
+
+---
+
+#### `clear_handler_whitelist()`
+
+清除 handler 白名单。
+
+**示例**:
+
+```python
+await ctx.registry.clear_handler_whitelist()
+```
+
+---
+
+## SkillClient - 技能注册客户端
+
+技能注册客户端，用于注册和管理技能。
+
+### 导入
+
+```python
+from astrbot_sdk.clients import SkillClient, SkillRegistration
+```
+
+### 方法
+
+#### `register(*, name, path, description="")`
+
+注册一个技能。
+
+**参数**:
+- `name` (`str`): 技能名称
+- `path` (`str`): 技能路径
+- `description` (`str`): 技能描述
+
+**返回**: `SkillRegistration`
+
+**示例**:
+
+```python
+skill = await ctx.skills.register(
+    name="my_skill",
+    path="/path/to/skill",
+    description="我的技能描述"
+)
+print(f"技能已注册: {skill.name}")
+```
+
+---
+
+#### `unregister(name)`
+
+注销技能。
+
+**参数**:
+- `name` (`str`): 技能名称
+
+**返回**: `bool` - 是否成功注销
+
+**示例**:
+
+```python
+removed = await ctx.skills.unregister("my_skill")
+if removed:
+    print("技能已注销")
+```
+
+---
+
+#### `list()`
+
+列出当前已注册的技能。
+
+**返回**: `list[SkillRegistration]`
+
+**示例**:
+
+```python
+skills = await ctx.skills.list()
+for skill in skills:
+    print(f"{skill.name}: {skill.skill_dir}")
+```
+
+---
+
+## SessionPluginManager - 会话插件管理器
+
+会话级别的插件状态管理器，用于检查和过滤会话相关的插件状态。
+
+### 导入
+
+```python
+from astrbot_sdk.clients import SessionPluginManager
+```
+
+### 方法
+
+#### `is_plugin_enabled_for_session(session, plugin_name)`
+
+检查插件在指定会话是否启用。
+
+**参数**:
+- `session` (`str | MessageSession | MessageEvent`): 会话标识
+- `plugin_name` (`str`): 插件名称
+
+**返回**: `bool`
+
+**示例**:
+
+```python
+enabled = await ctx.session_plugins.is_plugin_enabled_for_session(
+    session=event,
+    plugin_name="my_plugin"
+)
+if not enabled:
+    await event.reply("该插件在此会话已禁用")
+```
+
+---
+
+#### `filter_handlers_by_session(session, handlers)`
+
+根据会话过滤 handler 列表。
+
+**参数**:
+- `session` (`str | MessageSession | MessageEvent`): 会话标识
+- `handlers` (`list[HandlerMetadata]`): handler 列表
+
+**返回**: `list[HandlerMetadata]` - 过滤后的 handler 列表
+
+**示例**:
+
+```python
+handlers = await ctx.registry.get_handlers_by_event_type("message")
+filtered = await ctx.session_plugins.filter_handlers_by_session(
+    session=event,
+    handlers=handlers
+)
+print(f"可用 handler 数量: {len(filtered)}")
+```
+
+---
+
+## SessionServiceManager - 会话服务管理器
+
+会话级别的 LLM/TTS 服务状态管理器。
+
+### 导入
+
+```python
+from astrbot_sdk.clients import SessionServiceManager
+```
+
+### 方法
+
+#### `is_llm_enabled_for_session(session)`
+
+检查 LLM 服务在指定会话是否启用。
+
+**参数**:
+- `session` (`str | MessageSession | MessageEvent`): 会话标识
+
+**返回**: `bool`
+
+**示例**:
+
+```python
+if await ctx.session_services.is_llm_enabled_for_session(event):
+    reply = await ctx.llm.chat(prompt)
+```
+
+---
+
+#### `set_llm_status_for_session(session, enabled)`
+
+设置会话的 LLM 服务状态。
+
+**参数**:
+- `session` (`str | MessageSession | MessageEvent`): 会话标识
+- `enabled` (`bool`): 是否启用
+
+**示例**:
+
+```python
+await ctx.session_services.set_llm_status_for_session(event, enabled=False)
+await event.reply("LLM 已在此会话禁用")
+```
+
+---
+
+#### `should_process_llm_request(event_or_session)`
+
+检查是否应处理 LLM 请求（等同于 `is_llm_enabled_for_session`）。
+
+**参数**:
+- `event_or_session` (`str | MessageSession | MessageEvent`): 会话标识
+
+**返回**: `bool`
+
+**示例**:
+
+```python
+if await ctx.session_services.should_process_llm_request(event):
+    reply = await ctx.llm.chat(prompt)
+```
+
+---
+
+#### `is_tts_enabled_for_session(session)`
+
+检查 TTS 服务在指定会话是否启用。
+
+**参数**:
+- `session` (`str | MessageSession | MessageEvent`): 会话标识
+
+**返回**: `bool`
+
+---
+
+#### `set_tts_status_for_session(session, enabled)`
+
+设置会话的 TTS 服务状态。
+
+**参数**:
+- `session` (`str | MessageSession | MessageEvent`): 会话标识
+- `enabled` (`bool`): 是否启用
+
+**示例**:
+
+```python
+await ctx.session_services.set_tts_status_for_session(event, enabled=True)
+await event.reply("TTS 已在此会话启用")
+```
+
+---
+
+#### `should_process_tts_request(event_or_session)`
+
+检查是否应处理 TTS 请求（等同于 `is_tts_enabled_for_session`）。
+
+**参数**:
+- `event_or_session` (`str | MessageSession | MessageEvent`): 会话标识
+
+**返回**: `bool`
+
+---
+
 ## 使用示例
 
 ### 基本对话流程
@@ -1279,4 +1643,4 @@ async def handle_message(event: MessageEvent, ctx: Context):
 
 **版本**: v4.0
 **模块**: `astrbot_sdk.clients`
-**最后更新**: 2026-03-17
+**最后更新**: 2026-03-22

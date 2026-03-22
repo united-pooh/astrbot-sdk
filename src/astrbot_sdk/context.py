@@ -229,6 +229,7 @@ class Context:
         llm: LLM 客户端
         memory: 记忆客户端
         db: 数据库客户端
+        files: 文件服务客户端
         platform: 平台客户端
         providers: Provider 客户端
         provider_manager: Provider 管理客户端
@@ -237,6 +238,10 @@ class Context:
         kbs: 知识库管理客户端
         http: HTTP 客户端
         metadata: 元数据客户端
+        registry: 能力注册客户端
+        skills: 技能客户端
+        session_plugins: 会话插件管理器
+        session_services: 会话服务管理器
         plugin_id: 当前插件 ID
         logger: 日志器
         cancel_token: 取消令牌

@@ -442,8 +442,10 @@ class MyPlugin(Star):
 
 ### 1. ProviderManagerClient
 
+`ctx.provider_manager` 仅适用于 `reserved/system` 插件。普通插件应使用 `ctx.providers` 查询当前 Provider，而不是调用 Provider 管理能力。
+
 ```python
-from astrbot_sdk import Star, Context
+from astrbot_sdk import MessageEvent, Star, Context
 from astrbot_sdk.decorators import on_command
 
 class MyPlugin(Star):
@@ -455,7 +457,7 @@ class MyPlugin(Star):
         # 切换 Provider
         await ctx.provider_manager.set_provider(
             provider_id="gpt-4",
-            provider_type="chat_completion"
+            provider_type="chat_completion",
         )
         
         # 监听 Provider 变更

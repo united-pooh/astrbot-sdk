@@ -32,6 +32,10 @@ class Context:
     kbs: KnowledgeBaseManagerClient   # 知识库管理客户端
     http: HTTPClient                  # HTTP 客户端
     metadata: MetadataClient          # 元数据客户端
+    registry: RegistryClient          # handler 注册表客户端
+    skills: SkillClient               # 技能注册客户端
+    session_plugins: SessionPluginManager    # 会话插件管理器
+    session_services: SessionServiceManager  # 会话服务管理器
 
     # 系统工具
     _llm_tool_manager: LLMToolManager
@@ -500,6 +504,7 @@ stt_providers = await ctx.providers.list_stt()
 ### 7. Provider Manager 客户端 (ctx.provider_manager)
 
 提供 Provider 的动态管理能力。
+仅 `reserved/system` 插件可用。普通插件调用会收到 `provider.manager.* is restricted to reserved/system plugins` 错误；普通插件通常应使用 `ctx.providers` 做只读查询。
 
 ```python
 # 类型: ProviderManagerClient
@@ -516,7 +521,7 @@ from astrbot_sdk.llm.entities import ProviderType
 
 await ctx.provider_manager.set_provider(
     "my_provider",
-    ProviderType.TEXT_TO_TEXT,
+    ProviderType.CHAT_COMPLETION,
     umo=event.session_id
 )
 ```
@@ -538,6 +543,7 @@ record = await ctx.provider_manager.get_provider_by_id("my_provider")
 record = await ctx.provider_manager.create_provider({
     "id": "my_provider",
     "type": "openai",
+    "provider_type": "chat_completion",
     "model": "gpt-4"
 })
 
@@ -856,7 +862,93 @@ if config:
 
 ---
 
-### 13. Session Plugins 客户端 (ctx.session_plugins)
+### 13. Registry 客户端 (ctx.registry)
+
+提供 handler 注册表查询与白名单管理能力。
+
+```python
+# 类型: RegistryClient
+```
+
+#### 方法
+
+##### `get_handlers_by_event_type()`
+
+获取指定事件类型下的全部 handler 元数据。
+
+```python
+handlers = await ctx.registry.get_handlers_by_event_type("message")
+for handler in handlers:
+    print(handler.handler_full_name, handler.priority)
+```
+
+##### `get_handler_by_full_name()`
+
+按完整名称查询单个 handler。
+
+```python
+handler = await ctx.registry.get_handler_by_full_name("my_plugin.on_message")
+if handler:
+    print(handler.trigger_type, handler.require_admin)
+```
+
+##### `set_handler_whitelist() / get_handler_whitelist() / clear_handler_whitelist()`
+
+管理 handler 白名单。
+
+```python
+await ctx.registry.set_handler_whitelist(["plugin_a", "plugin_b"])
+whitelist = await ctx.registry.get_handler_whitelist()
+await ctx.registry.clear_handler_whitelist()
+```
+
+---
+
+### 14. Skills 客户端 (ctx.skills)
+
+提供运行时技能注册与查询能力。
+
+```python
+# 类型: SkillClient
+```
+
+#### 方法
+
+##### `register()`
+
+注册一个技能目录。
+
+```python
+skill = await ctx.skills.register(
+    name="my_skill",
+    path="/path/to/skill",
+    description="我的技能描述",
+)
+print(skill.skill_dir)
+```
+
+##### `unregister()`
+
+注销技能。
+
+```python
+removed = await ctx.skills.unregister("my_skill")
+print(removed)
+```
+
+##### `list()`
+
+列出当前已注册的技能。
+
+```python
+skills = await ctx.skills.list()
+for skill in skills:
+    print(skill.name, skill.path)
+```
+
+---
+
+### 15. Session Plugins 客户端 (ctx.session_plugins)
 
 提供会话级别的插件状态管理能力。
 
@@ -872,8 +964,8 @@ if config:
 
 ```python
 enabled = await ctx.session_plugins.is_plugin_enabled_for_session(
-    event,  # 可以是 event, session 字符串, 或 MessageSession
-    "my_plugin"
+    event,  # 可以是 event、session 字符串或 MessageSession
+    "my_plugin",
 )
 ```
 
@@ -882,17 +974,17 @@ enabled = await ctx.session_plugins.is_plugin_enabled_for_session(
 过滤会话启用的处理器。
 
 ```python
-from astrbot_sdk.clients.registry import HandlerMetadata
+from astrbot_sdk.clients import HandlerMetadata
 
 enabled_handlers = await ctx.session_plugins.filter_handlers_by_session(
     event,
-    all_handlers
+    all_handlers,
 )
 ```
 
 ---
 
-### 14. Session Services 客户端 (ctx.session_services)
+### 16. Session Services 客户端 (ctx.session_services)
 
 提供会话级别的 LLM/TTS 服务状态管理能力。
 
@@ -931,6 +1023,37 @@ await ctx.session_services.set_llm_status_for_session(event, False)
 ```python
 if await ctx.session_services.should_process_llm_request(event):
     response = await ctx.llm.chat("...")
+```
+
+##### `is_tts_enabled_for_session()`
+
+检查 TTS 是否对指定会话启用。
+
+```python
+enabled = await ctx.session_services.is_tts_enabled_for_session(event)
+if enabled:
+    await event.reply("TTS 服务可用")
+```
+
+##### `set_tts_status_for_session()`
+
+设置 TTS 服务状态。
+
+```python
+# 启用 TTS
+await ctx.session_services.set_tts_status_for_session(event, True)
+
+# 禁用 TTS
+await ctx.session_services.set_tts_status_for_session(event, False)
+```
+
+##### `should_process_tts_request()`
+
+判断是否应该处理 TTS 请求。
+
+```python
+if await ctx.session_services.should_process_tts_request(event):
+    await handle_tts(text)
 ```
 
 ---
@@ -1419,4 +1542,4 @@ async def setup_api(event: MessageEvent, ctx: Context):
 
 **版本**: v4.0
 **模块**: `astrbot_sdk.context.Context`
-**最后更新**: 2026-03-17
+**最后更新**: 2026-03-22

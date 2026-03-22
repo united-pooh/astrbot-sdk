@@ -14,8 +14,15 @@
 - [Files 客户端 (ctx.files)](#files-客户端)
 - [Platform 客户端 (ctx.platform)](#platform-客户端)
 - [Provider 客户端 (ctx.providers)](#provider-客户端)
+- [Provider 管理客户端 (ctx.provider_manager)](#provider-管理客户端)
+- [Personas 客户端 (ctx.personas / ctx.persona_manager)](#personas-客户端)
+- [Conversations 客户端 (ctx.conversations / ctx.conversation_manager)](#conversations-客户端)
+- [Knowledge Base 客户端 (ctx.kbs / ctx.kb_manager)](#knowledge-base-客户端)
 - [HTTP 客户端 (ctx.http)](#http-客户端)
 - [Metadata 客户端 (ctx.metadata)](#metadata-客户端)
+- [Registry 客户端 (ctx.registry)](#registry-客户端)
+- [Skills 客户端 (ctx.skills)](#skills-客户端)
+- [Session 管理客户端 (ctx.session_plugins / ctx.session_services)](#session-管理客户端)
 - [LLM Tool 管理方法](#llm-tool-管理方法)
 - [系统工具方法](#系统工具方法)
 
@@ -49,6 +56,10 @@ ctx.conversations: ConversationManagerClient  # 对话管理客户端
 ctx.kbs: KnowledgeBaseManagerClient   # 知识库管理客户端
 ctx.http: HTTPClient                  # HTTP 客户端
 ctx.metadata: MetadataClient          # 元数据客户端
+ctx.registry: RegistryClient          # 能力注册客户端
+ctx.skills: SkillClient               # 技能客户端
+ctx.session_plugins: SessionPluginManager  # 会话插件管理器
+ctx.session_services: SessionServiceManager  # 会话服务管理器
 ```
 
 ---
@@ -388,6 +399,193 @@ if provider:
 
 ---
 
+## Provider 管理客户端
+
+仅 `reserved/system` 插件可用。普通插件调用 `ctx.provider_manager` 的方法会收到 `provider.manager.* is restricted to reserved/system plugins` 错误；普通插件应使用只读的 `ctx.providers` 查询当前 Provider 状态。
+
+### set_provider()
+
+切换指定会话正在使用的 Provider。
+
+```python
+from astrbot_sdk.llm.entities import ProviderType
+
+await ctx.provider_manager.set_provider(
+    provider_id="openai_chat",
+    provider_type=ProviderType.CHAT_COMPLETION,
+    umo=event.session_id,
+)
+```
+
+### create_provider() / update_provider() / delete_provider()
+
+动态创建、更新和删除 Provider 实例。
+
+```python
+record = await ctx.provider_manager.create_provider(
+    {
+        "id": "custom_chat",
+        "type": "openai",
+        "provider_type": "chat_completion",
+        "model": "gpt-4.1",
+    }
+)
+
+updated = await ctx.provider_manager.update_provider(
+    "custom_chat",
+    {"model": "gpt-4.1-mini"},
+)
+
+await ctx.provider_manager.delete_provider("custom_chat")
+```
+
+### watch_changes()
+
+监听 Provider 变更事件。
+
+```python
+async for change in ctx.provider_manager.watch_changes():
+    print(f"{change.provider_id}: {change.provider_type} @ {change.umo}")
+```
+
+---
+
+## Personas 客户端
+
+`ctx.personas` 与 `ctx.persona_manager` 指向同一个人格管理客户端。
+
+### get_persona() / get_all_personas()
+
+查询单个人格或获取所有人格。
+
+```python
+persona = await ctx.personas.get_persona("assistant")
+all_personas = await ctx.personas.get_all_personas()
+```
+
+### create_persona() / update_persona() / delete_persona()
+
+创建、更新或删除人格。
+
+```python
+from astrbot_sdk.clients import PersonaCreateParams, PersonaUpdateParams
+
+created = await ctx.personas.create_persona(
+    PersonaCreateParams(
+        persona_id="assistant",
+        system_prompt="你是一个有用的助手。",
+    )
+)
+
+updated = await ctx.personas.update_persona(
+    "assistant",
+    PersonaUpdateParams(system_prompt="你是一个专业的编程助手。"),
+)
+
+await ctx.personas.delete_persona("assistant")
+```
+
+---
+
+## Conversations 客户端
+
+`ctx.conversations` 与 `ctx.conversation_manager` 指向同一个对话管理客户端。
+
+### new_conversation()
+
+为指定会话创建新对话。
+
+```python
+from astrbot_sdk.clients import ConversationCreateParams
+
+conv_id = await ctx.conversations.new_conversation(
+    event.session_id,
+    ConversationCreateParams(title="新对话"),
+)
+```
+
+### get_current_conversation() / get_conversations()
+
+获取当前对话或会话内的全部对话。
+
+```python
+current = await ctx.conversations.get_current_conversation(
+    event.session_id,
+    create_if_not_exists=True,
+)
+all_conversations = await ctx.conversations.get_conversations(event.session_id)
+```
+
+### switch_conversation() / update_conversation() / delete_conversation()
+
+切换、更新或删除对话。
+
+```python
+from astrbot_sdk.clients import ConversationUpdateParams
+
+await ctx.conversations.switch_conversation(event.session_id, "conv_123")
+await ctx.conversations.update_conversation(
+    event.session_id,
+    "conv_123",
+    ConversationUpdateParams(title="新标题"),
+)
+await ctx.conversations.delete_conversation(event.session_id, "conv_123")
+```
+
+---
+
+## Knowledge Base 客户端
+
+`ctx.kbs` 与 `ctx.kb_manager` 指向同一个知识库管理客户端。
+
+### list_kbs() / get_kb()
+
+列出所有知识库或获取单个知识库。
+
+```python
+kbs = await ctx.kbs.list_kbs()
+kb = await ctx.kbs.get_kb("tech_docs")
+```
+
+### create_kb() / update_kb() / delete_kb()
+
+创建、更新或删除知识库。
+
+```python
+from astrbot_sdk import KnowledgeBaseCreateParams, KnowledgeBaseUpdateParams
+
+kb = await ctx.kbs.create_kb(
+    KnowledgeBaseCreateParams(
+        kb_name="tech_docs",
+        embedding_provider_id="openai_embedding",
+        description="技术文档",
+    )
+)
+
+kb = await ctx.kbs.update_kb(
+    "tech_docs",
+    KnowledgeBaseUpdateParams(description="更新后的描述"),
+)
+deleted = await ctx.kbs.delete_kb("tech_docs")
+```
+
+### retrieve()
+
+从知识库中检索相关片段。
+
+```python
+result = await ctx.kbs.retrieve(
+    "如何初始化 Context",
+    kb_names=["tech_docs"],
+    top_m_final=3,
+)
+if result:
+    for item in result.results:
+        print(item.content)
+```
+
+---
+
 ## HTTP 客户端
 
 ### register_api()
@@ -472,6 +670,150 @@ if current:
 config = await ctx.metadata.get_plugin_config()
 if config:
     api_key = config.get("api_key")
+```
+
+---
+
+## Registry 客户端
+
+handler 注册表查询与白名单管理客户端，用于查询 handler 信息并管理 handler 白名单。
+
+### get_handlers_by_event_type()
+
+获取指定事件类型的所有 handler。
+
+```python
+handlers = await ctx.registry.get_handlers_by_event_type("message")
+for h in handlers:
+    print(f"{h.handler_full_name}: {h.description}")
+```
+
+### get_handler_by_full_name()
+
+通过完整名称获取 handler 元数据。
+
+```python
+handler = await ctx.registry.get_handler_by_full_name("my_plugin.on_message")
+if handler:
+    print(f"触发类型: {handler.trigger_type}")
+    print(f"优先级: {handler.priority}")
+```
+
+### set_handler_whitelist() / get_handler_whitelist()
+
+管理 handler 白名单。
+
+```python
+# 设置白名单
+await ctx.registry.set_handler_whitelist(["plugin_a", "plugin_b"])
+
+# 获取当前白名单
+whitelist = await ctx.registry.get_handler_whitelist()
+
+# 清空白名单
+await ctx.registry.clear_handler_whitelist()
+```
+
+---
+
+## Skills 客户端
+
+技能注册客户端，用于注册和管理技能。
+
+### register()
+
+注册一个技能。
+
+```python
+skill = await ctx.skills.register(
+    name="my_skill",
+    path="/path/to/skill",
+    description="我的技能描述"
+)
+print(f"技能已注册: {skill.name}")
+```
+
+### unregister()
+
+注销技能。
+
+```python
+removed = await ctx.skills.unregister("my_skill")
+if removed:
+    print("技能已注销")
+```
+
+### list()
+
+列出当前已注册的技能。
+
+```python
+skills = await ctx.skills.list()
+for skill in skills:
+    print(f"{skill.name}: {skill.skill_dir}")
+```
+
+---
+
+## Session 管理客户端
+
+### SessionPluginManager (ctx.session_plugins)
+
+会话级别的插件状态管理器。
+
+#### is_plugin_enabled_for_session()
+
+检查插件在指定会话是否启用。
+
+```python
+enabled = await ctx.session_plugins.is_plugin_enabled_for_session(
+    session=event,
+    plugin_name="my_plugin"
+)
+```
+
+#### filter_handlers_by_session()
+
+根据会话过滤 handler。
+
+```python
+handlers = await ctx.registry.get_handlers_by_event_type("message")
+filtered = await ctx.session_plugins.filter_handlers_by_session(
+    session=event,
+    handlers=handlers
+)
+```
+
+### SessionServiceManager (ctx.session_services)
+
+会话级别的 LLM/TTS 服务状态管理器。
+
+#### LLM 状态管理
+
+```python
+# 检查 LLM 是否启用
+enabled = await ctx.session_services.is_llm_enabled_for_session(event)
+
+# 设置 LLM 状态
+await ctx.session_services.set_llm_status_for_session(event, enabled=False)
+
+# 检查是否应处理 LLM 请求
+if await ctx.session_services.should_process_llm_request(event):
+    reply = await ctx.llm.chat(prompt)
+```
+
+#### TTS 状态管理
+
+```python
+# 检查 TTS 是否启用
+enabled = await ctx.session_services.is_tts_enabled_for_session(event)
+
+# 设置 TTS 状态
+await ctx.session_services.set_tts_status_for_session(event, enabled=True)
+
+# 检查是否应处理 TTS 请求
+if await ctx.session_services.should_process_tts_request(event):
+    await handle_tts(text)
 ```
 
 ---
