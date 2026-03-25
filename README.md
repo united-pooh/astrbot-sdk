@@ -1,5 +1,9 @@
 # AstrBot SDK
 
+<p align="center">
+  <a href="https://deepwiki.com/united-pooh/astrbot-sdk"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
+</p>
+
 AstrBot 插件开发 SDK，提供 v4 runtime、worker protocol 和插件工具链。
 
 ## 安装
