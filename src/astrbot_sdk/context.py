@@ -12,13 +12,17 @@ Attributes:
     db: 数据库客户端，用于 KV 持久化
     files: 文件服务客户端，用于文件令牌注册与解析
     platform: 平台客户端，用于发送消息
+    permission: 权限客户端，用于查询用户角色
     providers: Provider 客户端，用于查询和调用专用 Provider
     provider_manager: Provider 管理客户端，用于 reserved/system 级操作
+    permission_manager: 权限管理客户端，用于 reserved/system 级管理员维护
     personas: 人格管理客户端
     conversations: 对话管理客户端
     kbs: 知识库管理客户端
+    message_history: 消息历史管理客户端
     http: HTTP 客户端，用于注册 API 端点
     metadata: 元数据客户端，用于查询插件信息
+    mcp: MCP 管理客户端，用于本地/全局 MCP 服务管理
     skills: Skill 客户端，用于向 AstrBot 注册插件技能
     plugin_id: 当前插件的唯一标识
     logger: 绑定了插件 ID 的日志器
@@ -37,12 +41,16 @@ from loguru import logger as base_logger
 
 from ._internal.plugin_logger import PluginLogger
 from ._internal.star_runtime import current_star_instance
+from ._message_types import normalize_message_type
 from .clients import (
     DBClient,
     HTTPClient,
     LLMClient,
+    MCPManagerClient,
     MemoryClient,
     MetadataClient,
+    PermissionClient,
+    PermissionManagerClient,
     PlatformClient,
     PlatformError,
     PlatformStats,
@@ -56,6 +64,7 @@ from .clients.llm import LLMResponse
 from .clients.managers import (
     ConversationManagerClient,
     KnowledgeBaseManagerClient,
+    MessageHistoryManagerClient,
     PersonaManagerClient,
 )
 from .clients.provider import ProviderClient, ProviderManagerClient
@@ -229,14 +238,23 @@ class Context:
         llm: LLM 客户端
         memory: 记忆客户端
         db: 数据库客户端
+        files: 文件服务客户端
         platform: 平台客户端
+        permission: 权限客户端
         providers: Provider 客户端
         provider_manager: Provider 管理客户端
+        permission_manager: 权限管理客户端
         personas: 人格管理客户端
         conversations: 对话管理客户端
         kbs: 知识库管理客户端
+        message_history: 消息历史管理客户端
         http: HTTP 客户端
         metadata: 元数据客户端
+        registry: 能力注册客户端
+        skills: 技能客户端
+        session_plugins: 会话插件管理器
+        session_services: 会话服务管理器
+        mcp: MCP 管理客户端
         plugin_id: 当前插件 ID
         logger: 日志器
         cancel_token: 取消令牌
@@ -276,17 +294,24 @@ class Context:
         self.db = DBClient(proxy)
         self.files = FileServiceClient(proxy)
         self.platform = PlatformClient(proxy)
+        self.permission = PermissionClient(proxy)
         self.providers = ProviderClient(proxy)
         self.provider_manager = ProviderManagerClient(
             proxy,
             plugin_id=plugin_id,
             logger=bound_logger,
         )
+        self.permission_manager = PermissionManagerClient(
+            proxy,
+            source_event_payload=source_event_payload,
+        )
         self.personas = PersonaManagerClient(proxy)
         self.conversations = ConversationManagerClient(proxy)
         self.kbs = KnowledgeBaseManagerClient(proxy)
+        self.message_history = MessageHistoryManagerClient(proxy)
         self.http = HTTPClient(proxy)
         self.metadata = MetadataClient(proxy, plugin_id)
+        self.mcp = MCPManagerClient(proxy)
         self.registry = RegistryClient(proxy)
         self.skills = SkillClient(proxy)
         self.session_plugins = SessionPluginManager(proxy)
@@ -294,6 +319,8 @@ class Context:
         self.persona_manager = self.personas
         self.conversation_manager = self.conversations
         self.kb_manager = self.kbs
+        self.message_history_manager = self.message_history
+        self.mcp_manager = self.mcp
         self._llm_tool_manager = LLMToolManager(proxy)
         self.plugin_id = plugin_id
         self.logger: PluginLogger = (
@@ -415,18 +442,7 @@ class Context:
 
     @staticmethod
     def _normalize_compat_message_type(value: str) -> str:
-        normalized = str(value).strip().lower()
-        if normalized in {"groupmessage", "group_message", "group"}:
-            return "group"
-        if normalized in {
-            "privatemessage",
-            "private_message",
-            "private",
-            "friendmessage",
-            "friend_message",
-            "friend",
-        }:
-            return "private"
+        normalized = normalize_message_type(value)
         if not normalized:
             raise AstrBotError.invalid_input("send_message_by_id requires type")
         return normalized
@@ -699,6 +715,21 @@ class Context:
             type=str(platform_payload.get("type", "")),
             status=PlatformStatus.from_value(platform_payload.get("status")),
         )
+
+    async def list_platforms(self) -> list[PlatformCompatFacade]:
+        """获取所有平台实例的兼容层列表。
+
+        Returns:
+            所有可见平台实例的兼容层对象列表
+
+        Example:
+            for platform in await ctx.list_platforms():
+                print(platform.id, platform.status)
+        """
+        return [
+            self._build_platform_facade(item)
+            for item in await self._list_platform_instances()
+        ]
 
     async def get_platform(self, platform_type: str) -> PlatformCompatFacade | None:
         target_type = str(platform_type).strip().lower()

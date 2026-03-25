@@ -14,13 +14,12 @@
 from __future__ import annotations
 
 import asyncio
-import inspect
 import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from ._internal.star_runtime import bind_star_runtime
+from ._internal.decorator_lifecycle import run_lifecycle_with_decorators
 from ._internal.testing_support import (
     InMemoryDB,
     InMemoryMemory,
@@ -33,6 +32,7 @@ from ._internal.testing_support import (
     RecordedSend,
     StdoutPlatformSink,
 )
+from ._message_types import normalize_message_type
 from .context import CancelToken
 from .context import Context as RuntimeContext
 from .errors import AstrBotError
@@ -123,6 +123,8 @@ def _handler_metadata_from_loaded(
             if loaded.descriptor.command_route is not None
             else []
         ),
+        "require_admin": loaded.descriptor.permissions.require_admin,
+        "required_role": loaded.descriptor.permissions.required_role,
     }
 
 
@@ -255,8 +257,19 @@ class PluginHarness:
             peer=self.peer,
             plugin_id=self.plugin.name,
         )
+        plugin_metadata = _plugin_metadata_from_spec(self.plugin, enabled=True)
+        plugin_metadata["acknowledge_global_mcp_risk"] = any(
+            bool(
+                getattr(
+                    instance.__class__,
+                    "__astrbot_acknowledge_global_mcp_risk__",
+                    False,
+                )
+            )
+            for instance in self.loaded_plugin.instances
+        )
         self.router.upsert_plugin(
-            metadata=_plugin_metadata_from_spec(self.plugin, enabled=True),
+            metadata=plugin_metadata,
             config=load_plugin_config(self.plugin),
         )
         self.router.set_plugin_handlers(
@@ -489,32 +502,12 @@ class PluginHarness:
 
         for instance in self.loaded_plugin.instances:
             hook = self._resolve_lifecycle_hook(instance, method_name)
-            if hook is None:
-                continue
-            args: list[Any] = []
-            try:
-                signature = inspect.signature(hook)
-            except (TypeError, ValueError):
-                signature = None
-            if signature is not None:
-                positional_params = [
-                    parameter
-                    for parameter in signature.parameters.values()
-                    if parameter.kind
-                    in (
-                        inspect.Parameter.POSITIONAL_ONLY,
-                        inspect.Parameter.POSITIONAL_OR_KEYWORD,
-                    )
-                ]
-                if positional_params:
-                    args.append(self.lifecycle_context)
-            with bind_star_runtime(
-                instance if isinstance(instance, Star) else None,
-                self.lifecycle_context,
-            ):
-                result = hook(*args)
-                if inspect.isawaitable(result):
-                    await result
+            await run_lifecycle_with_decorators(
+                instance=instance,
+                hook=hook,
+                method_name=method_name,
+                context=self.lifecycle_context,
+            )
 
     def _match_handlers(
         self,
@@ -587,6 +580,8 @@ class PluginHarness:
         loaded: LoadedHandler,
         event_payload: dict[str, Any],
     ) -> dict[str, Any] | None:
+        if not self._passes_permissions(loaded, event_payload):
+            return None
         trigger = loaded.descriptor.trigger
         if isinstance(trigger, CommandTrigger):
             return self._match_command_trigger(loaded, trigger, event_payload)
@@ -647,6 +642,19 @@ class PluginHarness:
         ):
             return None
         return {}
+
+    @staticmethod
+    def _passes_permissions(
+        loaded: LoadedHandler,
+        event_payload: dict[str, Any],
+    ) -> bool:
+        permissions = loaded.descriptor.permissions
+        required_role = permissions.required_role
+        if required_role is None and permissions.require_admin:
+            required_role = "admin"
+        if required_role == "admin":
+            return bool(event_payload.get("is_admin", False))
+        return True
 
     def _passes_filters(
         self,
@@ -717,14 +725,12 @@ class PluginHarness:
 
     @staticmethod
     def _message_type_name(event_payload: dict[str, Any]) -> str:
-        explicit = str(event_payload.get("message_type", "")).lower()
-        if explicit in {"group", "private", "other"}:
-            return explicit
-        if event_payload.get("group_id"):
-            return "group"
-        if event_payload.get("user_id"):
-            return "private"
-        return "other"
+        return normalize_message_type(
+            event_payload.get("message_type", ""),
+            group_id=str(event_payload.get("group_id", "")).strip() or None,
+            user_id=str(event_payload.get("user_id", "")).strip() or None,
+            empty_default="other",
+        )
 
     @staticmethod
     def _resolve_lifecycle_hook(instance: Any, method_name: str):

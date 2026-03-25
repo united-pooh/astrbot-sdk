@@ -7,8 +7,11 @@ from .capabilities import (
     HttpCapabilityMixin,
     KnowledgeBaseCapabilityMixin,
     LLMCapabilityMixin,
+    McpCapabilityMixin,
     MemoryCapabilityMixin,
+    MessageHistoryCapabilityMixin,
     MetadataCapabilityMixin,
+    PermissionCapabilityMixin,
     PersonaCapabilityMixin,
     PlatformCapabilityMixin,
     ProviderCapabilityMixin,
@@ -25,11 +28,14 @@ class BuiltinCapabilityRouterMixin(
     PlatformCapabilityMixin,
     HttpCapabilityMixin,
     MetadataCapabilityMixin,
+    PermissionCapabilityMixin,
     ProviderCapabilityMixin,
+    McpCapabilityMixin,
     SessionCapabilityMixin,
     SkillCapabilityMixin,
     PersonaCapabilityMixin,
     ConversationCapabilityMixin,
+    MessageHistoryCapabilityMixin,
     KnowledgeBaseCapabilityMixin,
     SystemCapabilityMixin,
     CapabilityRouterBridgeBase,
@@ -41,12 +47,15 @@ class BuiltinCapabilityRouterMixin(
         self._register_platform_capabilities()
         self._register_http_capabilities()
         self._register_metadata_capabilities()
+        self._register_permission_capabilities()
         self._register_provider_capabilities()
         self._register_agent_tool_capabilities()
+        self._register_mcp_capabilities()
         self._register_session_capabilities()
         self._register_skill_capabilities()
         self._register_persona_capabilities()
         self._register_conversation_capabilities()
+        self._register_message_history_capabilities()
         self._register_kb_capabilities()
         self._register_provider_manager_capabilities()
         self._register_platform_manager_capabilities()

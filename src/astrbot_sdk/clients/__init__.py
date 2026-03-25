@@ -34,13 +34,19 @@ from .managers import (
     KnowledgeBaseCreateParams,
     KnowledgeBaseManagerClient,
     KnowledgeBaseRecord,
+    MessageHistoryManagerClient,
+    MessageHistoryPage,
+    MessageHistoryRecord,
+    MessageHistorySender,
     PersonaCreateParams,
     PersonaManagerClient,
     PersonaRecord,
     PersonaUpdateParams,
 )
+from .mcp import MCPManagerClient, MCPServerRecord, MCPServerScope, MCPSession
 from .memory import MemoryClient
 from .metadata import MetadataClient, PluginMetadata, StarMetadata
+from .permission import PermissionCheckResult, PermissionClient, PermissionManagerClient
 from .platform import PlatformClient, PlatformError, PlatformStats, PlatformStatus
 from .provider import (
     ManagedProviderRecord,
@@ -65,11 +71,22 @@ __all__ = [
     "KnowledgeBaseCreateParams",
     "KnowledgeBaseManagerClient",
     "KnowledgeBaseRecord",
+    "MessageHistoryManagerClient",
+    "MessageHistoryPage",
+    "MessageHistoryRecord",
+    "MessageHistorySender",
     "LLMClient",
     "LLMResponse",
+    "MCPManagerClient",
+    "MCPSession",
+    "MCPServerRecord",
+    "MCPServerScope",
     "MemoryClient",
     "ManagedProviderRecord",
     "MetadataClient",
+    "PermissionCheckResult",
+    "PermissionClient",
+    "PermissionManagerClient",
     "PlatformClient",
     "PlatformError",
     "PlatformStats",
