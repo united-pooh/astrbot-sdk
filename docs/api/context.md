@@ -845,9 +845,9 @@ await ctx.message_history.delete_all(session)
 # 类型: HTTPClient
 ```
 
-当前实现会拦截包含 `..` 的路径和部分明显非法输入，但路由校验并非完全严格。
-文档示例建议统一使用以 `/` 开头、没有重复斜杠的规范化路径。`unregister_api(route)` 在不传
-`methods` 时会移除当前插件在该 route 下注册的全部方法。
+当前实现会强制要求 route 使用 `/{plugin_id}` 或 `/{plugin_id}/...`，并校验
+`handler_capability` 必须属于当前插件。`unregister_api(route)` 在不传 `methods`
+时会移除当前插件在该 route 下注册的全部方法。
 
 #### 方法
 
@@ -866,7 +866,7 @@ async def handle_http_request(request_id: str, payload: dict, cancel_token):
     return {"status": 200, "body": {"result": "ok"}}
 
 await ctx.http.register_api(
-    route="/my-api",
+    route="/my_plugin/api",
     handler=handle_http_request,
     methods=["GET", "POST"],
     description="我的 API"
@@ -878,7 +878,7 @@ await ctx.http.register_api(
 注销 API。
 
 ```python
-await ctx.http.unregister_api("/my-api")
+await ctx.http.unregister_api("/my_plugin/api")
 ```
 
 ##### `list_apis()`
@@ -1607,7 +1607,7 @@ async def get_status(request_id: str, payload: dict, cancel_token):
 @on_command("setup_api")
 async def setup_api(event: MessageEvent, ctx: Context):
     await ctx.http.register_api(
-        route="/status",
+        route="/my_plugin/status",
         handler=get_status,
         methods=["GET"]
     )
@@ -1633,7 +1633,7 @@ async def setup_api(event: MessageEvent, ctx: Context):
 
 6. **DB 作用域**: `ctx.db` 的 key 会自动限制在当前插件命名空间中
 
-7. **HTTP 路由**: `ctx.http.register_api()` 当前会拦截 `..` 等明显非法路径，但仍建议插件自行使用规范化 route
+7. **HTTP 路由**: `ctx.http.register_api()` 会强制要求 route 使用 `/{plugin_id}` 前缀，并校验 `handler_capability` 属于当前插件
 
 8. **文件操作**: 使用 `ctx.files` 注册文件令牌，不要直接传递本地路径
 

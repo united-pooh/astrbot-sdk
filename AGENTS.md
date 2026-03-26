@@ -8,6 +8,7 @@
 - `Peer.initialize()` 需要在发起端也标记远程已初始化。仅在被动接收 `InitializeMessage` 时设置 `_remote_initialized` 会导致 `wait_until_remote_initialized()` 单边 API 死锁。
 - `Peer.invoke_stream()` 默认隐藏 `completed` 事件。需要保留最终结果的调用者必须显式启用 `include_completed=True`。
 - `CapabilityRouter.register(..., stream_handler=...)` 使用 `(request_id, payload, cancel_token)` 签名，不是 peer 级别的 `(message, token)`。
+- `plugin_id` 是 GroupWorkerRuntime 下插件公开资源的唯一命名空间。插件导出的 capability 必须使用 `<plugin_id>.<action>`，HTTP route 必须使用 `/{plugin_id}` 或 `/{plugin_id}/...`；不要依赖 supervisor 自动改名或隐式路由隔离。
 
 ### 模块导出约束
 

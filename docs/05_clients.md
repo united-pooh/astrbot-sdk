@@ -323,9 +323,9 @@ from astrbot_sdk.decorators import provide_capability
 
 ### 方法
 
-当前实现会拦截包含 `..` 的路径和部分明显非法输入，但路由校验并非完全严格。
-文档示例建议统一使用以 `/` 开头、没有重复斜杠的规范化路径。`unregister_api(route)` 在不传
-`methods` 时会移除当前插件在该 route 下注册的全部方法。
+当前实现会强制要求 route 使用 `/{plugin_id}` 或 `/{plugin_id}/...`，并校验
+`handler_capability` 必须属于当前插件。`unregister_api(route)` 在不传 `methods`
+时会移除当前插件在该 route 下注册的全部方法。
 
 #### register_api()
 
@@ -343,14 +343,14 @@ async def handle_http_request(request_id: str, payload: dict, cancel_token):
 
 # 方式 1：传入 handler 参数（推荐）
 await ctx.http.register_api(
-    route="/my-api",
+    route="/my_plugin/api",
     handler=handle_http_request,
     methods=["GET", "POST"]
 )
 
 # 方式 2：传入 handler_capability 字符串
 await ctx.http.register_api(
-    route="/my-api",
+    route="/my_plugin/api",
     handler_capability="my_plugin.http_handler",
     methods=["GET", "POST"]
 )
@@ -361,7 +361,7 @@ await ctx.http.register_api(
 注销 API。
 
 ```python
-await ctx.http.unregister_api("/my-api")
+await ctx.http.unregister_api("/my_plugin/api")
 ```
 
 #### list_apis()
@@ -525,7 +525,7 @@ async def get_status(request_id: str, payload: dict, cancel_token):
 @on_command("setup_api")
 async def setup_api(event: MessageEvent, ctx: Context):
     await ctx.http.register_api(
-        route="/status",
+        route="/my_plugin/status",
         handler=get_status,
         methods=["GET"]
     )
@@ -540,6 +540,6 @@ async def setup_api(event: MessageEvent, ctx: Context):
 2. 远程调用可能失败，建议使用 try-except
 3. `Memory` 适合语义检索，`DB` 适合结构化 KV，`MessageHistory` 适合精确保存原始消息记录
 4. `DBClient` 的 key 对插件隔离；`list()` 返回的 key 仍是插件本地视图；`ctx.db.watch()` 在当前 Core bridge MVP 暂不支持
-5. `HTTPClient.register_api()` 当前会拦截 `..` 等明显非法路径，但仍建议插件自行使用规范化 route；`unregister_api(route)` 默认移除该 route 下全部方法
+5. `HTTPClient.register_api()` 会强制要求 route 使用 `/{plugin_id}` 前缀，并校验 `handler_capability` 归属当前插件；`unregister_api(route)` 默认移除该 route 下全部方法
 6. 文件操作使用 file service 注册令牌
 7. 平台会话标识使用 `MessageSession` 字符串格式：`"platform_id:message_type:session_id"`，例如 `mock-platform:private:user-42` 或 `mock-platform:group:room-7`

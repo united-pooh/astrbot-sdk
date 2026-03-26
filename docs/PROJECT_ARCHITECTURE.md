@@ -20,18 +20,17 @@
 
 ## 项目概述
 
-AstrBot SDK 是一个基于 Python 3.12+ 的机器人插件开发框架，采用**进程隔离**和**能力路由**架构，支持插件的动态加载、独立运行和跨进程通信。
+AstrBot SDK 是一个基于 Python 3.12+ 的机器人插件开发框架，采用**Worker 隔离**和**能力路由**架构，支持插件的动态加载、独立运行和跨进程通信。
 
 ### 核心特性
 
 | 特性 | 描述 |
 |------|------|
-| **进程隔离** | 每个插件运行在独立 Worker 进程，崩溃不影响其他插件 |
+| **Worker 隔离** | Worker 可单插件运行，也可由 GroupWorkerRuntime 承载多个兼容插件；单个 Worker 崩溃不会影响其他 Worker |
 | **环境分组** | 多插件可共享同一 Python 虚拟环境，节省资源 |
 | **能力路由** | 显式声明的 Capability 系统，支持 JSON Schema 验证 |
 | **流式支持** | 原生支持流式 LLM 调用和增量结果返回 |
-| **向后兼容** | 完整的旧版 API 兼容层，支持无修改迁移 |
-| **协议优先** | 基于 v4 协议的统一通信模型，支持多种传输方式 |
+| **协议优先** | 基于 v4 协议的统一通信模型，支持多种传输方式 |(未完成)
 
 ### 技术栈
 
@@ -249,7 +248,7 @@ Worker (Plugin)                 Supervisor (Core)
 
 | 能力 | 说明 |
 |------|------|
-| `http.register_api` | 注册 HTTP API 端点，并拦截 `..` 等明显非法路径 |
+| `http.register_api` | 注册 HTTP API 端点；要求 route 使用 `/{plugin_id}` 前缀，并拦截 `..` 等明显非法路径 |
 | `http.unregister_api` | 注销 HTTP API 端点；不传 methods 时移除该 route 的全部方法 |
 | `http.list_apis` | 列出已注册的 API |
 
@@ -511,9 +510,9 @@ await ctx.platform.send_chain(event.session_id, chain)
 
 ### 6. 插件隔离模式
 
-- 每个插件运行在独立 Worker 进程
-- 崩溃不影响其他插件
-- 支持 GroupWorkerRuntime 共享环境
+- `PluginWorkerRuntime` 运行单个插件
+- `GroupWorkerRuntime` 可在同一 Worker 中承载多个兼容插件
+- 单个 Worker 崩溃只影响该 Worker 承载的插件集合
 
 ### 7. 热重载模式
 

@@ -801,9 +801,9 @@ await ctx.message_history.delete_all(session)
 
 ## HTTP 客户端
 
-`ctx.http.register_api()` 当前会拦截包含 `..` 的路径和部分明显非法输入，但校验并非完全严格。
-文档示例建议统一使用以 `/` 开头、没有重复斜杠的规范化路径。`ctx.http.unregister_api(route)`
-在不传 `methods` 时会移除当前插件在该路由下注册的全部方法。
+`ctx.http.register_api()` 会强制要求 route 使用 `/{plugin_id}` 或 `/{plugin_id}/...`，
+并校验 `handler_capability` 必须属于当前插件。`ctx.http.unregister_api(route)` 在不传
+`methods` 时会移除当前插件在该路由下注册的全部方法。
 
 如果路由和 handler 在插件定义阶段就固定了，优先考虑使用
 `@http_api(...) + @provide_capability(...)` 的声明式写法。它会在插件启动时自动注册，
@@ -827,7 +827,7 @@ class HttpPlugin(Star):
 
     async def setup_api(self, ctx: Context) -> None:
         await ctx.http.register_api(
-            route="/my-api",
+            route="/my_plugin/api",
             handler=self.handle_http_request,
             methods=["GET", "POST"],
         )
@@ -840,7 +840,7 @@ from astrbot_sdk import Star, http_api, provide_capability
 
 
 class HttpPlugin(Star):
-    @http_api(route="/my-api", methods=["GET", "POST"], description="我的 API")
+    @http_api(route="/my_plugin/api", methods=["GET", "POST"], description="我的 API")
     @provide_capability(
         "my_plugin.http_handler",
         description="处理 HTTP 请求",
@@ -858,7 +858,7 @@ class HttpPlugin(Star):
 注销 Web API 端点。
 
 ```python
-await ctx.http.unregister_api("/my-api")
+await ctx.http.unregister_api("/my_plugin/api")
 ```
 
 ### list_apis()

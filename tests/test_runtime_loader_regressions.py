@@ -7,6 +7,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
 
+import pytest
+
 from astrbot_sdk.runtime.loader import (
     discover_plugins,
     load_plugin,
@@ -251,3 +253,58 @@ class NoRequirementsPlugin(Star):
         instance = _load_first_instance(plugin_dir)
 
     assert instance.value == "no-deps"
+
+
+def test_load_plugin_rejects_capability_without_plugin_prefix(tmp_path: Path) -> None:
+    plugin_dir = tmp_path / "wrong_capability_namespace"
+    _write_plugin(
+        plugin_dir,
+        plugin_name="alpha_plugin",
+        class_name="WrongCapabilityPlugin",
+        main_source="""
+from astrbot_sdk import Star, provide_capability
+
+
+class WrongCapabilityPlugin(Star):
+    @provide_capability("shared.echo", description="invalid capability namespace")
+    async def echo(self, payload: dict) -> dict:
+        return payload
+""",
+    )
+
+    plugin = load_plugin_spec(plugin_dir)
+    validate_plugin_spec(plugin)
+
+    with (
+        _preserve_import_state("main"),
+        pytest.raises(ValueError, match="必须使用当前插件名前缀"),
+    ):
+        load_plugin(plugin)
+
+
+def test_load_plugin_rejects_duplicate_capability_names(tmp_path: Path) -> None:
+    plugin_dir = tmp_path / "duplicate_capability_names"
+    _write_plugin(
+        plugin_dir,
+        plugin_name="alpha_plugin",
+        class_name="DuplicateCapabilityPlugin",
+        main_source="""
+from astrbot_sdk import Star, provide_capability
+
+
+class DuplicateCapabilityPlugin(Star):
+    @provide_capability("alpha_plugin.echo", description="first capability")
+    async def first(self, payload: dict) -> dict:
+        return payload
+
+    @provide_capability("alpha_plugin.echo", description="duplicate capability")
+    async def second(self, payload: dict) -> dict:
+        return payload
+""",
+    )
+
+    plugin = load_plugin_spec(plugin_dir)
+    validate_plugin_spec(plugin)
+
+    with _preserve_import_state("main"), pytest.raises(ValueError, match="重复定义"):
+        load_plugin(plugin)

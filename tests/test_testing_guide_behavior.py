@@ -88,7 +88,7 @@ def _write_testing_guide_plugin(plugin_dir: Path) -> Path:
                 "        del ctx",
                 '        await event.reply("版本")',
                 "",
-                '    @provide_capability("testing_guide.custom_capability", description="Testing guide custom capability")',
+                '    @provide_capability("testing_guide_plugin.custom_capability", description="Testing guide custom capability")',
                 "    async def custom_capability(",
                 "        self,",
                 "        payload: dict[str, object],",
@@ -262,7 +262,7 @@ async def test_testing_guide_rate_limit_platform_send_clear_and_capability_invoc
     assert harness_with_plugin.sent_messages == []
 
     result = await harness_with_plugin.invoke_capability(
-        "testing_guide.custom_capability",
+        "testing_guide_plugin.custom_capability",
         {"param": "value"},
     )
     assert result == {

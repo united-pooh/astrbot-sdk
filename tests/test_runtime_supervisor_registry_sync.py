@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from astrbot_sdk.errors import AstrBotError, ErrorCodes
+from astrbot_sdk.protocol.descriptors import CapabilityDescriptor
 from astrbot_sdk.runtime.capability_router import CapabilityRouter
 import astrbot_sdk.runtime.supervisor as supervisor_module
 from astrbot_sdk.runtime.environment_groups import EnvironmentPlanResult
@@ -229,6 +231,55 @@ async def test_supervisor_publishes_plugin_registry_in_two_phases(
         ],
         "worker_group_count": 1,
     }
+
+
+def test_register_plugin_capability_rejects_cross_plugin_namespace() -> None:
+    runtime = object.__new__(SupervisorRuntime)
+    runtime.capability_router = CapabilityRouter()
+    runtime.capability_to_worker = {}
+    runtime._capability_sources = {}
+
+    with pytest.raises(ValueError, match="plugin_id 作为公开命名空间前缀"):
+        runtime._register_plugin_capability(
+            CapabilityDescriptor(
+                name="beta.echo",
+                description="cross plugin namespace",
+                input_schema={"type": "object"},
+                output_schema={"type": "object"},
+            ),
+            SimpleNamespace(),
+            "alpha",
+        )
+
+
+def test_register_plugin_capability_rejects_duplicate_name_without_rename() -> None:
+    runtime = object.__new__(SupervisorRuntime)
+    runtime.capability_router = CapabilityRouter()
+    runtime.capability_to_worker = {}
+    runtime._capability_sources = {}
+
+    runtime._register_plugin_capability(
+        CapabilityDescriptor(
+            name="alpha.echo",
+            description="echo",
+            input_schema={"type": "object"},
+            output_schema={"type": "object"},
+        ),
+        SimpleNamespace(),
+        "alpha",
+    )
+
+    with pytest.raises(RuntimeError, match="duplicate capability registration"):
+        runtime._register_plugin_capability(
+            CapabilityDescriptor(
+                name="alpha.echo",
+                description="duplicate echo",
+                input_schema={"type": "object"},
+                output_schema={"type": "object"},
+            ),
+            SimpleNamespace(),
+            "alpha",
+        )
 
 
 @pytest.mark.asyncio

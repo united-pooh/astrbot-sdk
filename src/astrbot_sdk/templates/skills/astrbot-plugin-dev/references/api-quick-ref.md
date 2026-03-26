@@ -128,7 +128,7 @@ Raises `TimeoutError`, `CancelledError`, or `ConversationReplaced` on session lo
 
 | Param | Type | Default | Notes |
 |-------|------|---------|-------|
-| name | `str` | required | e.g., "my_plugin.calculate" — no reserved prefixes |
+| name | `str` | required | e.g., "my_plugin.calculate" — must start with the plugin id and avoid reserved prefixes |
 | description | `str` | required | — |
 | input_schema | `dict \| None` | None | JSON Schema (mutually exclusive with input_model) |
 | output_schema | `dict \| None` | None | JSON Schema (mutually exclusive with output_model) |
@@ -166,7 +166,7 @@ Parameters in the function signature are used for auto-schema generation.
 
 | Param | Type | Default | Notes |
 |-------|------|---------|-------|
-| route | `str` | required | e.g., "/api/status" |
+| route | `str` | required | e.g., "/my_plugin/status" — must start with `/{plugin_id}` |
 | methods | `list[str] \| None` | ["GET"] | HTTP methods |
 | description | `str` | "" | — |
 | capability_name | `str \| None` | None | Optional capability name override |
