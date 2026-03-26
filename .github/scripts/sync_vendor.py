@@ -17,9 +17,8 @@ VENDOR_README = dedent(
     This directory is the minimized subtree payload consumed by the AstrBot main
     repository.
 
-    - `astrbot_sdk/` is synchronized from `src/astrbot_sdk/`
-    - `pyproject.toml` is rewritten for the flattened vendor layout so consumers
-      can inspect package metadata from `vendor-branch`
+    - `src/astrbot_sdk/` is synchronized from the source repository unchanged
+    - `pyproject.toml` is copied with its original src-layout package discovery
     - `VENDORED.md` describes the vendoring contract
     - tests, docs, CI files, and other source-repo-only content stay outside this directory
     """
@@ -33,9 +32,9 @@ VENDORED_NOTICE = dedent(
     via `git subtree`.
 
     - The source of truth is this `astrbot-sdk` repository.
-    - `vendor/astrbot_sdk/` is synchronized from `src/astrbot_sdk/`.
-    - `vendor/pyproject.toml` is generated from the root `pyproject.toml`, but its
-      package discovery is rewritten for the flattened subtree layout.
+    - `vendor/src/astrbot_sdk/` is synchronized from `src/astrbot_sdk/`.
+    - `vendor/pyproject.toml` is copied from the root so the vendored branch keeps
+      the same src-layout packaging metadata.
     - Do not edit vendored files directly inside the AstrBot main repository.
     - Tests and documentation remain only in the SDK source repository and are not
       copied into the vendored snapshot.
@@ -48,14 +47,12 @@ EXPECTED_TOP_LEVEL = {
     "LICENSE",
     "README.md",
     "VENDORED.md",
-    "astrbot_sdk",
     "pyproject.toml",
+    "src",
 }
 FORBIDDEN_PARTS = {"tests", "docs", ".github"}
 SRC_LAYOUT_MARKER = "# Package Discovery (src layout)"
 SRC_DISCOVERY_LINE = 'where = ["src"]'
-VENDOR_LAYOUT_MARKER = "# Package Discovery (vendor layout)"
-VENDOR_DISCOVERY_BLOCK = 'where = ["."]\ninclude = ["astrbot_sdk*"]'
 
 
 def fail(message: str) -> NoReturn:
@@ -85,19 +82,7 @@ def build_vendor_pyproject(root_pyproject_text: str) -> str:
             "root pyproject.toml is missing the expected setuptools src discovery line"
         )
 
-    vendor_pyproject = root_pyproject_text.replace(
-        SRC_LAYOUT_MARKER, VENDOR_LAYOUT_MARKER, 1
-    )
-    vendor_pyproject = vendor_pyproject.replace(
-        SRC_DISCOVERY_LINE,
-        VENDOR_DISCOVERY_BLOCK,
-        1,
-    )
-
-    if SRC_DISCOVERY_LINE in vendor_pyproject:
-        fail("vendored pyproject.toml still points setuptools discovery at src/")
-
-    return vendor_pyproject
+    return root_pyproject_text
 
 
 def ensure_clean_vendor_package(vendor_pkg_dir: Path) -> None:
@@ -124,16 +109,16 @@ def validate_vendor_layout(vendor_dir: Path, root_license: Path) -> None:
         fail("vendor/LICENSE is out of sync with root LICENSE")
 
     vendored_pyproject = (vendor_dir / "pyproject.toml").read_text(encoding="utf-8")
-    if SRC_DISCOVERY_LINE in vendored_pyproject:
-        fail("vendor/pyproject.toml still contains src-based package discovery")
-    if VENDOR_DISCOVERY_BLOCK not in vendored_pyproject:
-        fail("vendor/pyproject.toml is missing flattened package discovery settings")
+    if SRC_DISCOVERY_LINE not in vendored_pyproject:
+        fail("vendor/pyproject.toml must retain src-based package discovery")
+    if not (vendor_dir / "src" / "astrbot_sdk").is_dir():
+        fail("vendor/src/astrbot_sdk is missing")
 
 
 def build_vendor_snapshot(root: Path) -> None:
     src_dir = root / "src" / "astrbot_sdk"
     vendor_dir = root / "vendor"
-    vendor_pkg_dir = vendor_dir / "astrbot_sdk"
+    vendor_pkg_dir = vendor_dir / "src" / "astrbot_sdk"
     root_license = root / "LICENSE"
     root_pyproject = root / "pyproject.toml"
 
