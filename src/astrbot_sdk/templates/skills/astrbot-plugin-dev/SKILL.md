@@ -117,6 +117,12 @@ If `astrbot-sdk` is not on PATH, use `python -m astrbot_sdk <subcommand>` instea
 - **NEVER** store `ctx` on `self` outside the active handler or lifecycle call.
 - In `on_start` / `on_stop`, always call `await super().on_start(ctx)` / `await super().on_stop(ctx)`.
 
+### Error handling
+- For expected failures, raise `AstrBotError` from `astrbot_sdk.errors` instead of inventing ad-hoc exception or payload formats.
+- Reuse stable `ErrorCodes` and factory helpers such as `AstrBotError.invalid_input(...)`, `AstrBotError.internal_error(...)`, `AstrBotError.network_error(...)`, and `AstrBotError.capability_not_found(...)`.
+- Keep error output consistent with the SDK contract: `code`, `message`, `hint`, `details`, `docs_url`, `retryable`.
+- Do not use `{"error": "..."}` as the primary failure contract for HTTP/capability handlers when the operation should fail; raise `AstrBotError` so CLI, local harness, and AstrBot bridge surfaces stay aligned.
+
 ### Client API semantics (prevents common bugs)
 - `ctx.db.delete(key)` returns **None**, not bool. Check existence with `ctx.db.get()` first if you need to know.
 - `ctx.db.get(key)` returns **None** for missing keys, does not raise.
