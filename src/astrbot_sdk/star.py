@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from loguru import logger
 
-from .errors import AstrBotError
+from .errors import AstrBotError, ErrorCodes
 from .plugin_kv import PluginKVStoreMixin
 
 if TYPE_CHECKING:
@@ -103,26 +103,71 @@ class Star(PluginKVStoreMixin):
         )
 
     @staticmethod
+    def _is_placeholder_hint(hint: str) -> bool:
+        normalized = hint.strip()
+        return normalized in {
+            "",
+            "请联系插件作者",
+            "请检查日志并联系插件作者",
+            "请查看日志并联系插件作者",
+        }
+
+    @staticmethod
+    def _should_include_error_message(
+        error: AstrBotError,
+        *,
+        primary_text: str,
+    ) -> bool:
+        message = error.message.strip()
+        if not message or message == primary_text:
+            return False
+        if Star._is_placeholder_hint(error.hint):
+            return True
+        return error.code not in {
+            ErrorCodes.COOLDOWN_ACTIVE,
+            ErrorCodes.RATE_LIMITED,
+        }
+
+    @staticmethod
+    def _format_astrbot_error_reply(error: AstrBotError) -> str:
+        hint = error.hint.strip()
+        primary_text = error.message if Star._is_placeholder_hint(hint) else hint
+        lines = [primary_text]
+        lines.append(f"错误码：{error.code}")
+
+        # 某些 hint 是占位文案，或者只适合给用户看的概述；这时继续暴露
+        # message 可以避免默认错误处理把真实原因吞掉。
+        if Star._should_include_error_message(error, primary_text=primary_text):
+            lines.append(f"原因：{error.message}")
+        if error.docs_url:
+            lines.append(f"文档：{error.docs_url}")
+        if error.details:
+            lines.append(
+                f"详情：{json.dumps(error.details, ensure_ascii=False, sort_keys=True)}"
+            )
+        return "\n".join(lines)
+
+    @staticmethod
+    def _format_unhandled_exception_reply(error: Exception) -> str:
+        detail = str(error).strip()
+        if detail:
+            return f"未处理异常：{type(error).__name__}: {detail}"
+        return f"未处理异常：{type(error).__name__}"
+
+    @staticmethod
+    def _format_exception_log(error: Exception) -> str:
+        return "".join(
+            traceback.format_exception(type(error), error, error.__traceback__)
+        ).rstrip()
+
+    @staticmethod
     async def default_on_error(error: Exception, event, ctx) -> None:
         del ctx
         if isinstance(error, AstrBotError):
-            lines: list[str] = []
-            if error.retryable:
-                lines.append("请求失败，请稍后重试")
-            elif error.hint:
-                lines.append(error.hint)
-            else:
-                lines.append(error.message)
-            if error.docs_url:
-                lines.append(f"文档：{error.docs_url}")
-            if error.details:
-                lines.append(
-                    f"详情：{json.dumps(error.details, ensure_ascii=False, sort_keys=True)}"
-                )
-            await event.reply("\n".join(lines))
+            await event.reply(Star._format_astrbot_error_reply(error))
         else:
-            await event.reply("出了点问题，请联系插件作者")
-        logger.error("handler 执行失败\n{}", traceback.format_exc())
+            await event.reply(Star._format_unhandled_exception_reply(error))
+        logger.error("handler 执行失败\n{}", Star._format_exception_log(error))
 
     async def on_error(self, error: Exception, event, ctx) -> None:
         await Star.default_on_error(error, event, ctx)

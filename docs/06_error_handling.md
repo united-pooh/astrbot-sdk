@@ -114,13 +114,13 @@ raise AstrBotError.network_error(
 
 ```python
 raise AstrBotError.internal_error(
-    message="数据库连接失败",
-    hint="请联系插件作者"
+    message="数据库连接失败"
 )
 ```
 
 **属性**：
 - `retryable`: False
+- 默认错误处理会直接展示 `message`，并附带 `错误码`
 - 需要开发者介入
 
 #### 5. cancelled - 取消错误

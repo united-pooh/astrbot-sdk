@@ -198,7 +198,7 @@ class AstrBotError(Exception):
         cls,
         message: str,
         *,
-        hint: str = "请联系插件作者",
+        hint: str = "",
         docs_url: str = "",
         details: dict[str, Any] | None = None,
     ) -> AstrBotError:
