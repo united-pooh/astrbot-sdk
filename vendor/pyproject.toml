@@ -32,11 +32,10 @@ markers = [
 ]
 
 # ============================================================
-# Package Discovery (vendor layout)
+# Package Discovery (src layout)
 # ============================================================
 [tool.setuptools.packages.find]
-where = ["."]
-include = ["astrbot_sdk*"]
+where = ["src"]
 
 [tool.setuptools.package-data]
 astrbot_sdk = [

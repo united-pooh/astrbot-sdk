@@ -18,7 +18,7 @@ def _load_sync_vendor_module():
     return module
 
 
-def test_build_vendor_snapshot_includes_flattened_pyproject(tmp_path: Path):
+def test_build_vendor_snapshot_preserves_src_layout_pyproject(tmp_path: Path):
     module = _load_sync_vendor_module()
     repo_root = tmp_path / "repo"
     src_package = repo_root / "src" / "astrbot_sdk"
@@ -54,12 +54,11 @@ astrbot_sdk = ["templates/skills/*/SKILL.md"]
         "LICENSE",
         "README.md",
         "VENDORED.md",
-        "astrbot_sdk",
         "pyproject.toml",
+        "src",
     }
     vendored_pyproject = (vendor_root / "pyproject.toml").read_text(encoding="utf-8")
-    assert "# Package Discovery (vendor layout)" in vendored_pyproject
-    assert 'where = ["."]' in vendored_pyproject
-    assert 'include = ["astrbot_sdk*"]' in vendored_pyproject
-    assert 'where = ["src"]' not in vendored_pyproject
-    assert not (vendor_root / "astrbot_sdk" / "__pycache__").exists()
+    assert "# Package Discovery (src layout)" in vendored_pyproject
+    assert 'where = ["src"]' in vendored_pyproject
+    assert 'include = ["astrbot_sdk*"]' not in vendored_pyproject
+    assert not (vendor_root / "src" / "astrbot_sdk" / "__pycache__").exists()
