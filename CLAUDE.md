@@ -29,7 +29,7 @@
 ### 源码布局与 vendor 注意事项
 
 - 仓库采用 `src` 布局，SDK 真正源码目录是 `src/astrbot_sdk`，不是仓库根下的 `astrbot_sdk/`。
-- 维护给 AstrBot 主仓库 subtree 使用的 `vendor/` 快照时，`vendor/astrbot_sdk/` 必须从 `src/astrbot_sdk/` 同步，只带源码与运行时资源，不要混入根目录 `tests/`、`docs/`、`.github/` 等开发仓库内容。
+- 维护给 AstrBot 主仓库 subtree 使用的 `vendor/` 快照时，`vendor/astrbot_sdk/` 必须从 `src/astrbot_sdk/` 同步；`vendor/pyproject.toml` 必须保留并按 vendor 的平铺布局改写包发现配置，不要混入根目录 `tests/`、`docs/`、`.github/` 等开发仓库内容。
 
 ### 仓库工具文件注意事项
 

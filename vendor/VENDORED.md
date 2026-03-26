@@ -5,6 +5,8 @@ via `git subtree`.
 
 - The source of truth is this `astrbot-sdk` repository.
 - `vendor/astrbot_sdk/` is synchronized from `src/astrbot_sdk/`.
+- `vendor/pyproject.toml` is generated from the root `pyproject.toml`, but its
+  package discovery is rewritten for the flattened subtree layout.
 - Do not edit vendored files directly inside the AstrBot main repository.
 - Tests and documentation remain only in the SDK source repository and are not
   copied into the vendored snapshot.

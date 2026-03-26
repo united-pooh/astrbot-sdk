@@ -18,6 +18,8 @@ VENDOR_README = dedent(
     repository.
 
     - `astrbot_sdk/` is synchronized from `src/astrbot_sdk/`
+    - `pyproject.toml` is rewritten for the flattened vendor layout so consumers
+      can inspect package metadata from `vendor-branch`
     - `VENDORED.md` describes the vendoring contract
     - tests, docs, CI files, and other source-repo-only content stay outside this directory
     """
@@ -32,6 +34,8 @@ VENDORED_NOTICE = dedent(
 
     - The source of truth is this `astrbot-sdk` repository.
     - `vendor/astrbot_sdk/` is synchronized from `src/astrbot_sdk/`.
+    - `vendor/pyproject.toml` is generated from the root `pyproject.toml`, but its
+      package discovery is rewritten for the flattened subtree layout.
     - Do not edit vendored files directly inside the AstrBot main repository.
     - Tests and documentation remain only in the SDK source repository and are not
       copied into the vendored snapshot.
@@ -40,8 +44,18 @@ VENDORED_NOTICE = dedent(
     """
 )
 
-EXPECTED_TOP_LEVEL = {"LICENSE", "README.md", "VENDORED.md", "astrbot_sdk"}
+EXPECTED_TOP_LEVEL = {
+    "LICENSE",
+    "README.md",
+    "VENDORED.md",
+    "astrbot_sdk",
+    "pyproject.toml",
+}
 FORBIDDEN_PARTS = {"tests", "docs", ".github"}
+SRC_LAYOUT_MARKER = '# Package Discovery (src layout)'
+SRC_DISCOVERY_LINE = 'where = ["src"]'
+VENDOR_LAYOUT_MARKER = '# Package Discovery (vendor layout)'
+VENDOR_DISCOVERY_BLOCK = 'where = ["."]\ninclude = ["astrbot_sdk*"]'
 
 
 def fail(message: str) -> NoReturn:
@@ -61,6 +75,25 @@ def repo_root() -> Path:
 
 def write_text(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8", newline="\n")
+
+
+def build_vendor_pyproject(root_pyproject_text: str) -> str:
+    if SRC_LAYOUT_MARKER not in root_pyproject_text:
+        fail("root pyproject.toml is missing the expected src layout marker")
+    if SRC_DISCOVERY_LINE not in root_pyproject_text:
+        fail("root pyproject.toml is missing the expected setuptools src discovery line")
+
+    vendor_pyproject = root_pyproject_text.replace(SRC_LAYOUT_MARKER, VENDOR_LAYOUT_MARKER, 1)
+    vendor_pyproject = vendor_pyproject.replace(
+        SRC_DISCOVERY_LINE,
+        VENDOR_DISCOVERY_BLOCK,
+        1,
+    )
+
+    if SRC_DISCOVERY_LINE in vendor_pyproject:
+        fail("vendored pyproject.toml still points setuptools discovery at src/")
+
+    return vendor_pyproject
 
 
 def ensure_clean_vendor_package(vendor_pkg_dir: Path) -> None:
@@ -86,18 +119,26 @@ def validate_vendor_layout(vendor_dir: Path, root_license: Path) -> None:
     if root_license.read_bytes() != (vendor_dir / "LICENSE").read_bytes():
         fail("vendor/LICENSE is out of sync with root LICENSE")
 
+    vendored_pyproject = (vendor_dir / "pyproject.toml").read_text(encoding="utf-8")
+    if SRC_DISCOVERY_LINE in vendored_pyproject:
+        fail("vendor/pyproject.toml still contains src-based package discovery")
+    if VENDOR_DISCOVERY_BLOCK not in vendored_pyproject:
+        fail("vendor/pyproject.toml is missing flattened package discovery settings")
 
-def main() -> None:
-    root = repo_root()
+
+def build_vendor_snapshot(root: Path) -> None:
     src_dir = root / "src" / "astrbot_sdk"
     vendor_dir = root / "vendor"
     vendor_pkg_dir = vendor_dir / "astrbot_sdk"
     root_license = root / "LICENSE"
+    root_pyproject = root / "pyproject.toml"
 
     if not src_dir.is_dir():
         fail(f"expected source package at {src_dir}")
     if not root_license.is_file():
         fail(f"expected root LICENSE at {root_license}")
+    if not root_pyproject.is_file():
+        fail(f"expected root pyproject.toml at {root_pyproject}")
 
     if vendor_dir.exists():
         shutil.rmtree(vendor_dir)
@@ -111,10 +152,18 @@ def main() -> None:
 
     write_text(vendor_dir / "README.md", VENDOR_README)
     shutil.copy2(root_license, vendor_dir / "LICENSE")
+    write_text(
+        vendor_dir / "pyproject.toml",
+        build_vendor_pyproject(root_pyproject.read_text(encoding="utf-8")),
+    )
     write_text(vendor_dir / "VENDORED.md", VENDORED_NOTICE)
 
     validate_vendor_layout(vendor_dir, root_license)
     print(f"vendor snapshot refreshed from {src_dir}")
+
+
+def main() -> None:
+    build_vendor_snapshot(repo_root())
 
 
 if __name__ == "__main__":
