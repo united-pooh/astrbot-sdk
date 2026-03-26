@@ -33,6 +33,8 @@ test_plugin/astrbot_plugin_interface_coverage
 astrbot_sdk/
 !src/astrbot_sdk/
 !src/astrbot_sdk/**
+!vendor/src/astrbot_sdk/
+!vendor/src/astrbot_sdk/**
 src/astrbot_sdk/**/__pycache__/
 src/astrbot_sdk/**/*.py[cod]
 COMMAND_MATCH_REFACTOR_REPORT.md
