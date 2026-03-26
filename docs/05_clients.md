@@ -240,7 +240,7 @@ await ctx.platform.send_image(event.session_id, "https://example.com/image.png")
 发送消息链。
 
 ```python
-from astrbot_sdk.message_components import Plain, Image
+from astrbot_sdk.message.components import Plain, Image
 
 chain = [Plain("文字"), Image(url="https://example.com/img.jpg")]
 await ctx.platform.send_chain(event.session_id, chain)

@@ -202,7 +202,7 @@ async def batch_db_handler(self, event: MessageEvent, ctx: Context):
 使用流式 API 处理大数据：
 
 ```python
-from astrbot_sdk.message_components import Plain
+from astrbot_sdk.message.components import Plain
 
 @on_command("stream")
 async def stream_handler(self, event: MessageEvent, ctx: Context):

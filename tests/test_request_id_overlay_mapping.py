@@ -71,7 +71,7 @@ async def test_schedule_handler_preserves_request_overlay_state(tmp_path: Path) 
         payload["schedule"] = {
             "schedule_id": "schedule-1",
             "plugin_id": "overlay_test_plugin",
-            "handler_id": "overlay_test_plugin:scheduled",
+            "handler_id": "overlay_test_plugin:main.OverlayPlugin.scheduled",
             "trigger_kind": "interval",
             "interval_seconds": 60,
         }

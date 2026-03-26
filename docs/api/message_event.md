@@ -536,7 +536,7 @@ async def reply_chain(
 **示例**:
 
 ```python
-from astrbot_sdk.message_components import Plain, At, Image
+from astrbot_sdk.message.components import Plain, At, Image
 
 @on_command("rich")
 async def rich(self, event: MessageEvent):
@@ -1159,9 +1159,9 @@ async def public(self, event: MessageEvent):
 
 ## 相关模块
 
-- **消息组件**: `astrbot_sdk.message_components` - 所有消息组件类
-- **消息链**: `astrbot_sdk.message_result.MessageChain` - 消息链类
-- **消息构建器**: `astrbot_sdk.message_result.MessageBuilder` - 流式消息构建器
+- **消息组件**: `astrbot_sdk.message.components` - 所有消息组件类
+- **消息链**: `astrbot_sdk.message.result.MessageChain` - 消息链类
+- **消息构建器**: `astrbot_sdk.message.result.MessageBuilder` - 流式消息构建器
 - **会话引用**: `astrbot_sdk.protocol.descriptors.SessionRef` - 会话引用对象
 
 ---

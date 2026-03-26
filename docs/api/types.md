@@ -487,8 +487,8 @@ str_container: Container[str] = Container("hello")
 ## 相关模块
 
 - **LLM 客户端**: `astrbot_sdk.clients.LLMClient`
-- **消息组件**: `astrbot_sdk.message_components`
-- **消息链**: `astrbot_sdk.message_result.MessageChain`
+- **消息组件**: `astrbot_sdk.message.components`
+- **消息链**: `astrbot_sdk.message.result.MessageChain`
 - **上下文**: `astrbot_sdk.context.Context`
 
 ---
