@@ -21,6 +21,11 @@ def test_init_normalizes_plugin_name_and_adds_prefix() -> None:
         assert "name: astrbot_plugin_demo_plugin" in manifest
         assert "display_name: demo-plugin" in manifest
         assert "version: 1.0.0" in manifest
+        agents_notes = (plugin_dir / "AGENTS.md").read_text(encoding="utf-8")
+        claude_notes = (plugin_dir / "CLAUDE.md").read_text(encoding="utf-8")
+        assert "AstrBotError" in agents_notes
+        assert "ErrorCodes" in agents_notes
+        assert "AstrBotError" in claude_notes
         assert not (plugin_dir / ".claude").exists()
         assert not (plugin_dir / ".agents").exists()
         assert not (plugin_dir / ".opencode").exists()
@@ -64,6 +69,8 @@ def test_init_generates_claude_agent_directory() -> None:
         assert "astrbot_plugin_demo_plugin" in content
         assert "name: astrbot-plugin-dev" in content
         assert "Plugin root: `../../..`" in content
+        assert "AstrBotError" in content
+        assert "ErrorCodes" in content
         assert (
             plugin_dir
             / ".claude"
@@ -182,6 +189,8 @@ def test_build_excludes_generated_agent_skill_directories() -> None:
 
         assert "plugin.yaml" in names
         assert "main.py" in names
+        assert "AGENTS.md" not in names
+        assert "CLAUDE.md" not in names
         assert all(not name.startswith(".claude/") for name in names)
         assert all(not name.startswith(".agents/") for name in names)
         assert all(not name.startswith(".opencode/") for name in names)

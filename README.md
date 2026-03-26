@@ -73,6 +73,14 @@ astr init my-plugin
 astr init my-plugin --agents claude,codex
 ```
 
+`astr init <name>` 会生成插件骨架，并默认附带根级 `AGENTS.md` / `CLAUDE.md` 开发说明。传入 `--agents` 时，会在新插件目录下额外生成对应的项目级 agent 目录：
+
+- Claude Code: `.claude/skills/astrbot-plugin-dev/`
+- Codex: `.agents/skills/astrbot-plugin-dev/`
+- OpenCode: `.opencode/skills/astrbot-plugin-dev/`
+
+`--agents` 仅支持 `claude`、`codex`、`opencode`，使用逗号分隔；重复值会去重，非法值会直接报错。
+
 ### 第一个插件
 
 ```python
@@ -190,7 +198,6 @@ ruff check . --fix
 ---
 
 ## 相关资源
-
 - **AstrBot 主项目**: https://github.com/AstrBotDevs/AstrBot
 - **Python 版本**: >= 3.12
 - **SDK 版本**: v4.0

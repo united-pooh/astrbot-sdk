@@ -1,5 +1,22 @@
 # API Quick Reference
 
+## Errors
+
+Use the SDK's unified error model for expected failures:
+
+```python
+from astrbot_sdk.errors import AstrBotError, ErrorCodes
+
+raise AstrBotError.invalid_input(
+    "session_id and message are required",
+    hint="Provide both session_id and message",
+)
+```
+
+- Prefer `AstrBotError` over ad-hoc `{"error": ...}` payloads when the operation should fail.
+- Reuse stable `ErrorCodes` and existing factory helpers where possible.
+- The SDK error contract is `code`, `message`, `hint`, `details`, `docs_url`, `retryable`.
+
 ## Trigger Decorators
 
 ### @on_command
