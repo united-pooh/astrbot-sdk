@@ -77,7 +77,7 @@ for item in results:
 
 #### save()
 
-保存记忆。
+保存记忆。支持可选的 TTL（过期时间）。
 
 ```python
 await ctx.memory.save("user_pref", {"theme": "dark", "lang": "zh"})
@@ -85,6 +85,9 @@ await ctx.memory.save(
     "profile:alice",
     {"name": "Alice", "embedding_text": "Alice 喜欢蓝色和海边"},
 )
+
+# 带过期时间（秒）
+await ctx.memory.save("session_temp", {"state": "waiting"}, ttl_seconds=3600)
 ```
 
 #### get()
@@ -95,16 +98,29 @@ await ctx.memory.save(
 pref = await ctx.memory.get("user_pref")
 ```
 
-#### save_with_ttl()
+#### exists()
 
-保存带过期时间的记忆。
+检查键是否存在。
 
 ```python
-await ctx.memory.save_with_ttl(
-    "session_temp",
-    {"state": "waiting"},
-    ttl_seconds=3600
-)
+if await ctx.memory.exists("user_pref"):
+    print("配置存在")
+```
+
+#### list_keys()
+
+列出某个精确 namespace 下的键。
+
+```python
+keys = await ctx.memory.list_keys(namespace="users/alice")
+```
+
+#### count()
+
+统计条目数。
+
+```python
+total = await ctx.memory.count()
 ```
 
 #### delete()
@@ -113,6 +129,15 @@ await ctx.memory.save_with_ttl(
 
 ```python
 await ctx.memory.delete("old_note")
+```
+
+#### delete_many()
+
+批量删除记忆。
+
+```python
+deleted = await ctx.memory.delete_many(["old1", "old2", "old3"])
+print(f"删除了 {deleted} 条记忆")
 ```
 
 #### stats()
@@ -175,12 +200,8 @@ await ctx.db.set_many({"user:1": {"name": "Alice"}, "user:2": {"name": "Bob"}})
 
 #### watch()
 
-监听变更。
-
-```python
-async for event in ctx.db.watch("user:"):
-    print(event["op"], event["key"])
-```
+当前 Core bridge MVP 暂不支持 `ctx.db.watch()`；调用会抛出异常。需要监听变更时，
+请先使用 `get()` / `list()` 轮询。
 
 ---
 
@@ -194,12 +215,16 @@ from astrbot_sdk.clients import PlatformClient
 
 ### 方法
 
+`send()` / `send_image()` / `send_chain()` 当前通过 core bridge 依赖当前事件上下文。
+如果你是在 handler 里针对当前会话回复，直接传 `event.session_id` 即可；如果要主动发消息，
+请改用 `send_by_session()` 或 `send_by_id()`。
+
 #### send()
 
 发送文本消息。
 
 ```python
-await ctx.platform.send("qq:group:123456", "大家好！")
+await ctx.platform.send(event.session_id, "大家好！")
 ```
 
 #### send_image()
@@ -234,12 +259,27 @@ await ctx.platform.send_by_id(
 )
 ```
 
-#### get_members()
+#### send_by_session()
 
-获取群成员。
+通过 MessageSession 对象发送。
 
 ```python
-members = await ctx.platform.get_members("qq:group:123456")
+from astrbot_sdk import MessageSession
+
+session = MessageSession(
+    platform_id="qq",
+    message_type="group",
+    session_id="group:123456"
+)
+await ctx.platform.send_by_session(session, "Hello")
+```
+
+#### get_members()
+
+获取群成员。当前实现只支持“当前群事件”的会话上下文，不支持任意群 ID 直接查询。
+
+```python
+members = await ctx.platform.get_members(event.session_id)
 ```
 
 ---
@@ -256,7 +296,7 @@ from astrbot_sdk.clients import FileServiceClient
 
 #### register_file()
 
-注册文件。
+注册文件。当前实现依赖宿主配置 `callback_api_base`。
 
 ```python
 token = await ctx.files.register_file("/path/to/file.jpg", timeout=3600)
@@ -289,9 +329,11 @@ from astrbot_sdk.decorators import provide_capability
 
 #### register_api()
 
-注册 API。
+注册 API。需要先使用 `@provide_capability` 声明处理函数。
 
 ```python
+from astrbot_sdk.decorators import provide_capability
+
 @provide_capability(
     name="my_plugin.http_handler",
     description="处理 HTTP 请求"
@@ -299,9 +341,17 @@ from astrbot_sdk.decorators import provide_capability
 async def handle_http_request(request_id: str, payload: dict, cancel_token):
     return {"status": 200, "body": {"result": "ok"}}
 
+# 方式 1：传入 handler 参数（推荐）
 await ctx.http.register_api(
     route="/my-api",
     handler=handle_http_request,
+    methods=["GET", "POST"]
+)
+
+# 方式 2：传入 handler_capability 字符串
+await ctx.http.register_api(
+    route="/my-api",
+    handler_capability="my_plugin.http_handler",
     methods=["GET", "POST"]
 )
 ```
@@ -369,6 +419,14 @@ config = await ctx.metadata.get_plugin_config()
 api_key = config.get("api_key")
 ```
 
+#### save_plugin_config()
+
+保存配置。
+
+```python
+await ctx.metadata.save_plugin_config({"api_key": "new_key", "debug": True})
+```
+
 ---
 
 ## 8. 其他客户端与管理器
@@ -381,6 +439,9 @@ api_key = config.get("api_key")
 - [ConversationManagerClient](./api/clients.md#conversationmanagerclient---对话管理客户端): 管理会话内的多轮对话；在 `Context` 中可通过 `ctx.conversations` 或 `ctx.conversation_manager` 访问。
 - [MessageHistoryManagerClient](./api/clients.md#messagehistorymanagerclient---消息历史管理客户端): 按 `MessageSession` 精确保存消息组件、发送者和元数据；在 `Context` 中可通过 `ctx.message_history` 或 `ctx.message_history_manager` 访问。
 - [KnowledgeBaseManagerClient](./api/clients.md#knowledgebasemanagerclient---知识库管理客户端): 管理知识库、文档和检索；在 `Context` 中可通过 `ctx.kbs` 或 `ctx.kb_manager` 访问。
+- [MCPManagerClient](./api/clients.md#mcpmanagerclient---mcp-管理客户端): 管理 MCP 服务器（本地/全局），创建临时会话并调用工具；在 `Context` 中可通过 `ctx.mcp` 或 `ctx.mcp_manager` 访问。
+- [PermissionClient](./api/clients.md#permissionclient---权限查询客户端): 查询用户角色和管理员列表；在 `Context` 中可通过 `ctx.permission` 访问。
+- [PermissionManagerClient](./api/clients.md#permissionmanagerclient---权限管理客户端): 添加/移除管理员；在 `Context` 中可通过 `ctx.permission_manager` 访问。
 - [RegistryClient](./api/clients.md#registryclient---handler-注册表客户端): 查询 handler 元数据，并管理 handler 白名单。
 - [SkillClient](./api/clients.md#skillclient---技能注册客户端): 在运行时注册、注销和列出插件技能目录。
 - [SessionPluginManager](./api/clients.md#sessionpluginmanager---会话插件管理器): 按会话检查插件启用状态并过滤 handler。
@@ -478,7 +539,7 @@ async def setup_api(event: MessageEvent, ctx: Context):
 1. 所有客户端方法都是异步的
 2. 远程调用可能失败，建议使用 try-except
 3. `Memory` 适合语义检索，`DB` 适合结构化 KV，`MessageHistory` 适合精确保存原始消息记录
-4. `DBClient` 的 key 对插件隔离；`list()` 和 `watch()` 返回的 key 仍是插件本地视图
+4. `DBClient` 的 key 对插件隔离；`list()` 返回的 key 仍是插件本地视图；`ctx.db.watch()` 在当前 Core bridge MVP 暂不支持
 5. `HTTPClient.register_api()` 当前会拦截 `..` 等明显非法路径，但仍建议插件自行使用规范化 route；`unregister_api(route)` 默认移除该 route 下全部方法
 6. 文件操作使用 file service 注册令牌
-7. 平台标识使用 UMO 格式：`"platform:instance:session_id"`
+7. 平台会话标识使用 `MessageSession` 字符串格式：`"platform_id:message_type:session_id"`，例如 `mock-platform:private:user-42` 或 `mock-platform:group:room-7`

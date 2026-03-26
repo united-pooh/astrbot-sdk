@@ -17,12 +17,24 @@
 
 - 当检查 peer 是否完成远程初始化时，避免对可能接收 `MagicMock` peer 的代码使用 `getattr(mock, "remote_peer")` 探测。`MagicMock` 会生成 truthy 子属性，`CapabilityProxy` 应从 `peer.__dict__` 或其他具体存储位置读取显式状态。
 - `test_plugin/old/` 和 `test_plugin/new/` 可能包含已生成的 `__pycache__` / `*.pyc`。测试夹具复制示例插件时必须显式忽略这些缓存文件。
+- `PluginHarness.dispatch_event(...)` 应该作为 SDK 装饰器运行时测试的默认入口；不要只断言 `_match_handlers()` 的匹配结果。停止链(`event.stop_event()`)与定时 handler 定向分发都需要经过实际 dispatch 才有意义。
+- SDK 插件想通过 `ctx.metadata.get_plugin_config()` 读取真实配置，测试夹具必须同时提供 `_conf_schema.json` 和对应配置文件；只有配置文件而没有 schema 时，loader 会按当前实现返回空配置。
 
 ### 插件加载注意事项
 
 - 本地 `dev --watch` 或同一路径插件重复加载场景，不能只依赖 `import_string()` 的跨插件模块根冲突清理。热重载前必须按插件目录清理模块缓存。
 - `_prepare_plugin_import()` 不能只在插件目录"不在 `sys.path`"时才插入路径。像 `main.py` 这种通用模块名，如果插件目录已在 `sys.path` 但排在后面，`import main` 仍会先命中别处模块；导入前必须把目标插件目录提到 `sys.path[0]`。
 - 示例/夹具测试如果直接用裸模块名导入插件入口（例如 `from main import HelloPlugin`），会污染 `sys.modules["main"]`，随后真实 loader 再按 `main:HelloPlugin` 加载时可能串到错误模块。
+
+### 源码布局与 vendor 注意事项
+
+- 仓库采用 `src` 布局，SDK 真正源码目录是 `src/astrbot_sdk`，不是仓库根下的 `astrbot_sdk/`。
+- 维护给 AstrBot 主仓库 subtree 使用的 `vendor/` 快照时，`vendor/astrbot_sdk/` 必须从 `src/astrbot_sdk/` 同步，只带源码与运行时资源，不要混入根目录 `tests/`、`docs/`、`.github/` 等开发仓库内容。
+
+### 仓库工具文件注意事项
+
+- `.gitignore` 中忽略根目录脚本目录时要写成 `/scripts/`，不要写成宽泛的 `scripts/`；后者会把 `.github/scripts/` 这类 CI 辅助脚本也一起忽略掉。
+- 涉及仓库路径复制、遍历、校验的维护脚本，优先使用 Python `pathlib` / `shutil` 实现，避免把 `/`、`\` 或 shell 工具行为写死在脚本里。
 
 ---
 

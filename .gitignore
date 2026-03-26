@@ -27,7 +27,7 @@ pip-wheel-metadata/
 fork-docs/
 tmp/
 openspec/
-scripts/
+/scripts/
 cs/
 test_plugin/astrbot_plugin_interface_coverage
 astrbot_sdk/
@@ -54,6 +54,9 @@ plugins/.venv/
 .vscode/
 *.iml
 uv.lock
-/astrBot/
 plugins/
 .serena/
+!.github/scripts/
+!.github/scripts/**
+.github/scripts/**/__pycache__/
+.github/scripts/**/*.py[cod]
