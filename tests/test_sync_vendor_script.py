@@ -96,11 +96,14 @@ dev = ["pytest>=8.0.0", "ruff>=0.4.0"]
 
 def test_cli_test_template_dependency_remains_in_vendored_contract():
     module = _load_sync_vendor_module()
-    cli_source = (Path(__file__).resolve().parent.parent / "src" / "astrbot_sdk" / "cli.py").read_text(
-        encoding="utf-8"
-    )
+    cli_source = (
+        Path(__file__).resolve().parent.parent / "src" / "astrbot_sdk" / "cli.py"
+    ).read_text(encoding="utf-8")
 
-    assert "from astrbot_sdk.testing import MockContext, MockMessageEvent, PluginHarness" in cli_source
+    assert (
+        "from astrbot_sdk.testing import MockContext, MockMessageEvent, PluginHarness"
+        in cli_source
+    )
     assert Path("testing.py") not in module.PACKAGE_EXCLUDE_RELATIVE_PATHS
     assert Path("_testing_support.py") not in module.PACKAGE_EXCLUDE_RELATIVE_PATHS
     assert (
