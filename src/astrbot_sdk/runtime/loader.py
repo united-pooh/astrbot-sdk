@@ -723,7 +723,8 @@ def validate_plugin_spec(plugin: PluginSpec) -> None:
                 "必须是 '<module>:<Class>'。"
             )
 
-#TODO: 解决插件名相同可能导致的问题，真有那么一天我们sdk小团体也是好起来了
+
+# TODO: 解决插件名相同可能导致的问题，真有那么一天我们sdk小团体也是好起来了
 def discover_plugins(plugins_dir: Path) -> PluginDiscoveryResult:
     """扫描目录发现所有插件。"""
     plugins_root = plugins_dir.resolve()
