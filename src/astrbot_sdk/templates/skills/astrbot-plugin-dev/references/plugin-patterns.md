@@ -293,6 +293,7 @@ Expose REST endpoints.
 
 **main.py:**
 ```python
+from astrbot_sdk.errors import AstrBotError
 from astrbot_sdk import Context, Star
 from astrbot_sdk.decorators import http_api
 
@@ -307,7 +308,10 @@ class WebhookPlugin(Star):
         target = payload.get("session_id", "")
         message = payload.get("message", "")
         if not target or not message:
-            return {"error": "session_id and message required"}
+            raise AstrBotError.invalid_input(
+                "session_id and message are required",
+                hint="Provide both session_id and message",
+            )
         await ctx.platform.send(target, message)
         return {"sent": True}
 ```
