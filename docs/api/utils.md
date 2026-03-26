@@ -6,7 +6,7 @@
 
 **模块路径**:
 - `astrbot_sdk.context.CancelToken`
-- `astrbot_sdk.message_session.MessageSession`
+- `astrbot_sdk.message.session.MessageSession`
 - `astrbot_sdk.types.GreedyStr`
 - `astrbot_sdk.commands`
 - `astrbot_sdk.schedule.ScheduleContext`
@@ -47,7 +47,7 @@ from astrbot_sdk import (
 
 # 从子模块导入
 from astrbot_sdk.context import CancelToken
-from astrbot_sdk.message_session import MessageSession
+from astrbot_sdk.message.session import MessageSession
 from astrbot_sdk.types import GreedyStr
 from astrbot_sdk.commands import CommandGroup, command_group, print_cmd_tree
 from astrbot_sdk.schedule import ScheduleContext

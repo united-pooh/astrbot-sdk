@@ -4,7 +4,7 @@
 
 消息组件是用于构建聊天消息的各种元素。每个组件代表消息中的一种特定内容类型，可以单独使用或组合成消息链。
 
-**模块路径**: `astrbot_sdk.message_components`
+**模块路径**: `astrbot_sdk.message.components`
 
 ---
 
@@ -35,13 +35,13 @@ from astrbot_sdk import (
 )
 
 # 从子模块导入
-from astrbot_sdk.message_components import (
+from astrbot_sdk.message.components import (
     Plain, At, AtAll, Image, Record, Video, File, Reply, Poke, Forward
 )
-from astrbot_sdk.message_result import MessageChain, MessageBuilder
+from astrbot_sdk.message.result import MessageChain, MessageBuilder
 
 # 辅助函数
-from astrbot_sdk.message_components import (
+from astrbot_sdk.message.components import (
     payload_to_component,
     component_to_payload_sync,
     component_to_payload,
@@ -255,14 +255,6 @@ img = Image.fromFileSystem("/path/to/image.jpg")
 
 ```python
 img = Image.fromBase64("iVBORw0KGgo...")
-```
-
-#### `fromBytes(data, **kwargs)`
-
-从字节数据创建图片。
-
-```python
-img = Image.fromBytes(b"...")
 ```
 
 ### 实例方法
@@ -632,8 +624,8 @@ class MessageChain:
 ### 构造方法
 
 ```python
-from astrbot_sdk.message_result import MessageChain
-from astrbot_sdk.message_components import Plain, At
+from astrbot_sdk.message.result import MessageChain
+from astrbot_sdk.message.components import Plain, At
 
 # 空消息链
 chain = MessageChain()
@@ -685,7 +677,7 @@ text = chain.get_plain_text()
 ### 使用示例
 
 ```python
-from astrbot_sdk.message_result import MessageBuilder
+from astrbot_sdk.message.result import MessageBuilder
 
 chain = (MessageBuilder()
     .text("Hello ")
@@ -717,7 +709,7 @@ await event.reply_chain(chain)
 将协议 payload 转换为消息组件。
 
 ```python
-from astrbot_sdk.message_components import payload_to_component
+from astrbot_sdk.message.components import payload_to_component
 
 component = payload_to_component(payload)
 ```
@@ -727,7 +719,7 @@ component = payload_to_component(payload)
 将组件同步转换为 payload。
 
 ```python
-from astrbot_sdk.message_components import component_to_payload_sync
+from astrbot_sdk.message.components import component_to_payload_sync
 
 payload = component_to_payload_sync(component)
 ```
@@ -737,7 +729,7 @@ payload = component_to_payload_sync(component)
 将组件异步转换为 payload。
 
 ```python
-from astrbot_sdk.message_components import component_to_payload
+from astrbot_sdk.message.components import component_to_payload
 
 payload = await component_to_payload(component)
 ```
@@ -749,7 +741,7 @@ payload = await component_to_payload(component)
 检查值是否为消息组件。
 
 ```python
-from astrbot_sdk.message_components import is_message_component
+from astrbot_sdk.message.components import is_message_component
 
 if is_message_component(value):
     print("是消息组件")
@@ -762,7 +754,7 @@ if is_message_component(value):
 批量将 payload 列表转换为组件列表。
 
 ```python
-from astrbot_sdk.message_components import payloads_to_components
+from astrbot_sdk.message.components import payloads_to_components
 
 components = payloads_to_components(payload_list)
 ```
@@ -774,7 +766,7 @@ components = payloads_to_components(payload_list)
 从 URL 构建媒体组件。
 
 ```python
-from astrbot_sdk.message_components import build_media_component_from_url
+from astrbot_sdk.message.components import build_media_component_from_url
 
 # 自动识别类型
 component = build_media_component_from_url("https://example.com/image.jpg")
@@ -812,7 +804,7 @@ async def from_url(
 **示例**:
 
 ```python
-from astrbot_sdk.message_components import MediaHelper
+from astrbot_sdk.message.components import MediaHelper
 
 # 自动识别
 img = await MediaHelper.from_url("https://example.com/photo.jpg")
@@ -846,7 +838,7 @@ async def download(url: str, save_dir: Path) -> Path
 
 ```python
 from pathlib import Path
-from astrbot_sdk.message_components import MediaHelper
+from astrbot_sdk.message.components import MediaHelper
 
 try:
     path = await MediaHelper.download(
@@ -936,13 +928,13 @@ async def info(self, event: MessageEvent):
 
 ## 相关模块
 
-- **消息组件**: `astrbot_sdk.message_components`
-- **消息链**: `astrbot_sdk.message_result.MessageChain`
-- **消息构建器**: `astrbot_sdk.message_result.MessageBuilder`
+- **消息组件**: `astrbot_sdk.message.components`
+- **消息链**: `astrbot_sdk.message.result.MessageChain`
+- **消息构建器**: `astrbot_sdk.message.result.MessageBuilder`
 - **协议描述符**: `astrbot_sdk.protocol.descriptors`
 
 ---
 
 **版本**: v4.0
-**模块**: `astrbot_sdk.message_components`
+**模块**: `astrbot_sdk.message.components`
 **最后更新**: 2026-03-17

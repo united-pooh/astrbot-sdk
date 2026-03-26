@@ -92,6 +92,12 @@ dev = ["pytest>=8.0.0", "ruff>=0.4.0"]
         vendor_root / "src" / "astrbot_sdk" / "_internal" / "testing_support.py"
     ).exists()
     assert not (vendor_root / "src" / "astrbot_sdk" / "templates" / "skills").exists()
+    assert not (vendor_root / "src" / "astrbot_sdk" / "_command_model.py").exists()
+    assert not (vendor_root / "src" / "astrbot_sdk" / "_plugin_logger.py").exists()
+    assert not (vendor_root / "src" / "astrbot_sdk" / "_star_runtime.py").exists()
+    assert not (vendor_root / "src" / "astrbot_sdk" / "message_components.py").exists()
+    assert not (vendor_root / "src" / "astrbot_sdk" / "message_result.py").exists()
+    assert not (vendor_root / "src" / "astrbot_sdk" / "message_session.py").exists()
 
 
 def test_cli_test_template_dependency_remains_in_vendored_contract():

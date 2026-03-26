@@ -4,7 +4,7 @@
 
 消息结果是用于构建和返回消息结果的类，包括消息链容器、流式构建器和事件结果包装器。
 
-**模块路径**: `astrbot_sdk.message_result`
+**模块路径**: `astrbot_sdk.message.result`
 
 ---
 
@@ -24,7 +24,7 @@
 from astrbot_sdk import MessageChain, MessageBuilder, MessageEventResult
 
 # 从子模块导入
-from astrbot_sdk.message_result import (
+from astrbot_sdk.message.result import (
     MessageChain,
     MessageBuilder,
     MessageEventResult,
@@ -32,7 +32,7 @@ from astrbot_sdk.message_result import (
 )
 
 # 消息组件（用于构建消息链）
-from astrbot_sdk.message_components import Plain, At, Image, File
+from astrbot_sdk.message.components import Plain, At, Image, File
 ```
 
 ---
@@ -47,7 +47,6 @@ from astrbot_sdk.message_components import Plain, At, Image, File
 class EventResultType(str, Enum):
     EMPTY = "empty"      # 空结果
     CHAIN = "chain"      # 消息链结果
-    PLAIN = "plain"      # 纯文本结果
 ```
 
 ### 值说明
@@ -56,7 +55,6 @@ class EventResultType(str, Enum):
 |------|------|
 | `EventResultType.EMPTY` | 空结果，不返回任何内容 |
 | `EventResultType.CHAIN` | 消息链结果，返回一个或多个消息组件 |
-| `EventResultType.PLAIN` | 纯文本结果，返回文本内容 |
 
 ---
 
@@ -77,7 +75,7 @@ class MessageChain:
 #### 空消息链
 
 ```python
-from astrbot_sdk.message_result import MessageChain
+from astrbot_sdk.message.result import MessageChain
 
 chain = MessageChain()
 ```
@@ -85,8 +83,8 @@ chain = MessageChain()
 #### 带初始组件
 
 ```python
-from astrbot_sdk.message_result import MessageChain
-from astrbot_sdk.message_components import Plain, At
+from astrbot_sdk.message.result import MessageChain
+from astrbot_sdk.message.components import Plain, At
 
 chain = MessageChain([
     Plain("Hello"),
@@ -241,8 +239,8 @@ len(chain)  # 组件数量
 ### 使用示例
 
 ```python
-from astrbot_sdk.message_result import MessageChain
-from astrbot_sdk.message_components import Plain, At, Image
+from astrbot_sdk.message.result import MessageChain
+from astrbot_sdk.message.components import Plain, At, Image
 
 # 创建并使用
 chain = MessageChain([
@@ -434,8 +432,8 @@ def build(self) -> MessageChain:
 ### 完整使用示例
 
 ```python
-from astrbot_sdk.message_result import MessageBuilder
-from astrbot_sdk.message_components import Plain, At, Image
+from astrbot_sdk.message.result import MessageBuilder
+from astrbot_sdk.message.components import Plain, At, Image
 
 # 链式构建
 chain = (MessageBuilder()
@@ -476,7 +474,7 @@ class MessageEventResult:
 #### 空结果
 
 ```python
-from astrbot_sdk.message_result import MessageEventResult, EventResultType
+from astrbot_sdk.message.result import MessageEventResult, EventResultType
 
 result = MessageEventResult()
 # 或
@@ -485,22 +483,11 @@ result = MessageEventResult(type=EventResultType.EMPTY)
 
 ---
 
-#### 纯文本结果
-
-```python
-result = MessageEventResult(
-    type=EventResultType.PLAIN,
-    chain=MessageChain([Plain("返回内容")])
-)
-```
-
----
-
 #### 消息链结果
 
 ```python
-from astrbot_sdk.message_result import MessageEventResult, EventResultType, MessageChain
-from astrbot_sdk.message_components import Plain, Image
+from astrbot_sdk.message.result import MessageEventResult, EventResultType, MessageChain
+from astrbot_sdk.message.components import Plain, Image
 
 result = MessageEventResult(
     type=EventResultType.CHAIN,
@@ -542,15 +529,6 @@ def to_payload(self) -> dict[str, Any]:
         {"type": "image", "data": {"url": "..."}}
     ]
 }
-
-# PLAIN
-{
-    "type": "plain",
-    "chain": [{"type": "text", "data": {"text": "内容"}}]
-}
-```
-
----
 
 #### `from_payload(payload)`
 
@@ -675,8 +653,8 @@ def coerce_message_chain(value: Any) -> MessageChain | None
 **示例**:
 
 ```python
-from astrbot_sdk.message_result import coerce_message_chain, MessageChain
-from astrbot_sdk.message_components import Plain, Image
+from astrbot_sdk.message.result import coerce_message_chain, MessageChain
+from astrbot_sdk.message.components import Plain, Image
 
 # 从 MessageEventResult 提取
 chain = coerce_message_chain(result)
@@ -711,18 +689,17 @@ chain = coerce_message_chain([Plain("文本"), Image.fromURL("url")])
 4. **结果类型**:
    - `EMPTY`: 不返回任何内容
    - `CHAIN`: 返回一个或多个消息组件
-   - `PLAIN`: 返回文本内容
 
 ---
 
 ## 相关模块
 
-- **消息组件**: `astrbot_sdk.message_components`
-- **事件结果**: `astrbot_sdk.events.MessageEventResult`
-- **事件类型**: `astrbot_sdk.events.EventResultType`
+- **消息组件**: `astrbot_sdk.message.components`
+- **事件结果**: `astrbot_sdk.message.result.MessageEventResult`
+- **事件类型**: `astrbot_sdk.message.result.EventResultType`
 
 ---
 
 **版本**: v4.0
-**模块**: `astrbot_sdk.message_result`
+**模块**: `astrbot_sdk.message.result`
 **最后更新**: 2026-03-17

@@ -250,8 +250,8 @@ from astrbot_sdk.clients.llm import LLMResponse
 from astrbot_sdk.clients.managers import ConversationUpdateParams
 from astrbot_sdk.decorators import on_event
 from astrbot_sdk.llm.entities import ProviderRequest
-from astrbot_sdk.message_result import MessageEventResult
-from astrbot_sdk.message_components import Plain
+from astrbot_sdk.message.result import MessageEventResult
+from astrbot_sdk.message.components import Plain
 
 class PersonaSample(Star):
     @on_event("waiting_llm_request")

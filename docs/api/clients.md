@@ -555,7 +555,7 @@ await ctx.platform.send(
 )
 
 # 使用 MessageSession
-from astrbot_sdk.message_session import MessageSession
+from astrbot_sdk.message.session import MessageSession
 
 session = MessageSession(
     platform_id="qq",
@@ -611,7 +611,7 @@ await ctx.platform.send_image(
 **示例**:
 
 ```python
-from astrbot_sdk.message_components import Plain, Image
+from astrbot_sdk.message.components import Plain, Image
 
 # 使用 MessageChain
 chain = MessageChain([
