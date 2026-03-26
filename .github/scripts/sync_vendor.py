@@ -7,6 +7,7 @@ import subprocess
 import sys
 from pathlib import Path
 from textwrap import dedent
+from typing import NoReturn
 
 
 VENDOR_README = dedent(
@@ -43,7 +44,7 @@ EXPECTED_TOP_LEVEL = {"LICENSE", "README.md", "VENDORED.md", "astrbot_sdk"}
 FORBIDDEN_PARTS = {"tests", "docs", ".github"}
 
 
-def fail(message: str) -> "NoReturn":
+def fail(message: str) -> NoReturn:
     print(f"error: {message}", file=sys.stderr)
     raise SystemExit(1)
 
