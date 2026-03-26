@@ -5,10 +5,11 @@ from __future__ import annotations
 import shutil
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 from re import MULTILINE, DOTALL, compile as re_compile
 from textwrap import dedent
-from typing import NoReturn
+from typing import Any, NoReturn
 
 
 VENDOR_README = dedent(
@@ -21,7 +22,9 @@ VENDOR_README = dedent(
     - `src/astrbot_sdk/` keeps the runtime SDK package plus the minimal testing
       helpers that AstrBot and SDK-generated templates still treat as part of the
       vendored contract
-    - developer templates and embedded markdown reference files are excluded
+    - agent skill templates and embedded markdown reference files are excluded
+    - root project-note templates for `astr init` stay vendored because the CLI
+      still generates `AGENTS.md` / `CLAUDE.md` by default
     - `pyproject.toml` keeps the src-layout package discovery but drops dev/test-only metadata
     - `VENDORED.md` describes the vendoring contract
     - tests, docs, CI files, and other source-repo-only content stay outside this directory
@@ -40,8 +43,9 @@ VENDORED_NOTICE = dedent(
     - Vendored snapshots keep the runtime SDK plus the minimal testing helpers
       (`testing.py`, `_testing_support.py`, `_internal/testing_support.py`) because
       AstrBot and SDK-generated test templates still depend on them.
-    - Vendored snapshots exclude developer skill templates and markdown reference
-      assets that are not needed by the subtree consumer.
+    - Vendored snapshots exclude agent skill templates and markdown reference
+      assets that are not needed by the subtree consumer, but retain the default
+      `AGENTS.md` / `CLAUDE.md` project-note templates used by `astr init`.
     - `vendor/pyproject.toml` keeps src-layout package discovery, but strips
       test/dev-only sections so the subtree stays runtime-focused.
     - Do not edit vendored files directly inside the AstrBot main repository.
@@ -60,16 +64,22 @@ EXPECTED_TOP_LEVEL = {
     "src",
 }
 FORBIDDEN_PARTS = {"tests", "docs", ".github"}
-SRC_LAYOUT_MARKER = "# Package Discovery (src layout)"
-SRC_DISCOVERY_LINE = 'where = ["src"]'
+EXPECTED_BUILD_BACKEND = "hatchling.build"
+EXPECTED_WHEEL_PACKAGES = ["src/astrbot_sdk"]
 PYPROJECT_SECTIONS_TO_DROP = (
     "tool.pytest.ini_options",
-    "tool.setuptools.package-data",
     "project.optional-dependencies",
 )
 PACKAGE_EXCLUDE_RELATIVE_PATHS = (
     Path("AGENTS.md"),
     Path("templates") / "skills",
+)
+REQUIRED_VENDOR_PACKAGE_RELATIVE_PATHS = (
+    Path("testing.py"),
+    Path("_testing_support.py"),
+    Path("_internal") / "testing_support.py",
+    Path("templates") / "project_notes" / "AGENTS.md",
+    Path("templates") / "project_notes" / "CLAUDE.md",
 )
 
 
@@ -100,20 +110,112 @@ def drop_toml_section(toml_text: str, section_name: str) -> str:
     return section_pattern.sub("", toml_text)
 
 
-def build_vendor_pyproject(root_pyproject_text: str) -> str:
-    if SRC_LAYOUT_MARKER not in root_pyproject_text:
-        fail("root pyproject.toml is missing the expected src layout marker")
-    if SRC_DISCOVERY_LINE not in root_pyproject_text:
+def parse_toml_document(toml_text: str, *, source: str) -> dict[str, Any]:
+    try:
+        data = tomllib.loads(toml_text)
+    except tomllib.TOMLDecodeError as exc:
+        fail(f"{source} is not valid TOML: {exc}")
+    if not isinstance(data, dict):
+        fail(f"{source} must decode to a TOML table")
+    return data
+
+
+def get_nested_table(
+    mapping: dict[str, Any],
+    *keys: str,
+    source: str,
+    required: bool = True,
+) -> dict[str, Any] | None:
+    current: Any = mapping
+    table_name = ".".join(keys)
+    for index, key in enumerate(keys):
+        if not isinstance(current, dict):
+            fail(f"{source} [{'.'.join(keys[:index])}] is not a TOML table")
+        if key not in current:
+            if required:
+                fail(f"{source} is missing [{table_name}]")
+            return None
+        current = current[key]
+    if not isinstance(current, dict):
+        fail(f"{source} [{table_name}] is not a TOML table")
+    return current
+
+
+def has_nested_table(mapping: dict[str, Any], *keys: str) -> bool:
+    current: Any = mapping
+    for key in keys:
+        if not isinstance(current, dict) or key not in current:
+            return False
+        current = current[key]
+    return isinstance(current, dict)
+
+
+def validate_hatchling_build_config(
+    pyproject_data: dict[str, Any], *, source: str
+) -> None:
+    build_system = get_nested_table(pyproject_data, "build-system", source=source)
+    assert build_system is not None
+
+    requires = build_system.get("requires")
+    if not isinstance(requires, list) or not any(
+        isinstance(requirement, str) and requirement.startswith("hatchling")
+        for requirement in requires
+    ):
+        fail(f"{source} [build-system].requires must include hatchling")
+
+    build_backend = build_system.get("build-backend")
+    if build_backend != EXPECTED_BUILD_BACKEND:
         fail(
-            "root pyproject.toml is missing the expected setuptools src discovery line"
+            f"{source} [build-system].build-backend must be {EXPECTED_BUILD_BACKEND!r}"
         )
 
+    wheel_target = get_nested_table(
+        pyproject_data,
+        "tool",
+        "hatch",
+        "build",
+        "targets",
+        "wheel",
+        source=source,
+    )
+    assert wheel_target is not None
+    packages = wheel_target.get("packages")
+    if packages != EXPECTED_WHEEL_PACKAGES:
+        fail(
+            f"{source} [tool.hatch.build.targets.wheel].packages must be "
+            f"{EXPECTED_WHEEL_PACKAGES!r}"
+        )
+
+
+def build_vendor_pyproject(root_pyproject_text: str) -> str:
+    root_pyproject_data = parse_toml_document(
+        root_pyproject_text,
+        source="root pyproject.toml",
+    )
+    validate_hatchling_build_config(
+        root_pyproject_data,
+        source="root pyproject.toml",
+    )
+
+    # Preserve the hand-edited formatting and comments in vendor/pyproject.toml
+    # while still validating the build contract semantically via tomllib.
     vendor_pyproject = root_pyproject_text
     for section_name in PYPROJECT_SECTIONS_TO_DROP:
         vendor_pyproject = drop_toml_section(vendor_pyproject, section_name)
 
-    if SRC_DISCOVERY_LINE not in vendor_pyproject:
-        fail("vendor/pyproject.toml must retain src-based package discovery")
+    vendor_pyproject_data = parse_toml_document(
+        vendor_pyproject,
+        source="vendor/pyproject.toml",
+    )
+    validate_hatchling_build_config(
+        vendor_pyproject_data,
+        source="vendor/pyproject.toml",
+    )
+    for section_name in PYPROJECT_SECTIONS_TO_DROP:
+        if has_nested_table(vendor_pyproject_data, *section_name.split(".")):
+            fail(
+                f"vendor/pyproject.toml still contains non-runtime section [{section_name}]"
+            )
 
     return vendor_pyproject.strip() + "\n"
 
@@ -149,10 +251,16 @@ def validate_vendor_layout(vendor_dir: Path, root_license: Path) -> None:
         fail("vendor/LICENSE is out of sync with root LICENSE")
 
     vendored_pyproject = (vendor_dir / "pyproject.toml").read_text(encoding="utf-8")
-    if SRC_DISCOVERY_LINE not in vendored_pyproject:
-        fail("vendor/pyproject.toml must retain src-based package discovery")
+    vendored_pyproject_data = parse_toml_document(
+        vendored_pyproject,
+        source="vendor/pyproject.toml",
+    )
+    validate_hatchling_build_config(
+        vendored_pyproject_data,
+        source="vendor/pyproject.toml",
+    )
     for section_name in PYPROJECT_SECTIONS_TO_DROP:
-        if f"[{section_name}]" in vendored_pyproject:
+        if has_nested_table(vendored_pyproject_data, *section_name.split(".")):
             fail(
                 f"vendor/pyproject.toml still contains non-runtime section [{section_name}]"
             )
@@ -163,6 +271,9 @@ def validate_vendor_layout(vendor_dir: Path, root_license: Path) -> None:
             fail(
                 f"vendor runtime package still contains excluded path: {relative_path}"
             )
+    for relative_path in REQUIRED_VENDOR_PACKAGE_RELATIVE_PATHS:
+        if not (vendor_dir / "src" / "astrbot_sdk" / relative_path).exists():
+            fail(f"vendor runtime package is missing required path: {relative_path}")
 
 
 def build_vendor_snapshot(root: Path) -> None:
