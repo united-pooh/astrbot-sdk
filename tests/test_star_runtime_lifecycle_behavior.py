@@ -439,10 +439,12 @@ async def test_star_default_on_error_replies_through_real_handler_dispatch(
             await harness.dispatch_text("invalid")
         assert harness.sent_messages[-1].text is not None
         assert "check payload" in harness.sent_messages[-1].text
+        assert "错误码：invalid_input" in harness.sent_messages[-1].text
+        assert "原因：bad payload" in harness.sent_messages[-1].text
         assert "https://example.com/docs" in harness.sent_messages[-1].text
         assert '"a": 1' in harness.sent_messages[-1].text
         assert '"b": 2' in harness.sent_messages[-1].text
 
         with pytest.raises(RuntimeError, match="boom"):
             await harness.dispatch_text("unknown")
-        assert harness.sent_messages[-1].text == "出了点问题，请联系插件作者"
+        assert harness.sent_messages[-1].text == "未处理异常：RuntimeError: boom"

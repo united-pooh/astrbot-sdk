@@ -290,8 +290,8 @@ terminate()       ← 后调用（无 Context）
 **触发时机**: 任何 Handler 执行抛出异常时
 
 **默认行为**:
-- `AstrBotError`：根据错误类型发送友好提示
-- 其他异常：发送通用错误消息
+- `AstrBotError`：优先发送 `hint`，必要时补充 `message`、`错误码`、`docs_url`、`details`
+- 其他异常：发送异常类型和消息，例如 `未处理异常：RuntimeError: boom`
 - 记录错误日志
 
 **示例**:
@@ -305,16 +305,11 @@ class MyPlugin(Star):
 
         # SDK 标准错误
         if isinstance(error, AstrBotError):
-            lines = []
-            if error.retryable:
-                lines.append("请求失败，请稍后重试")
-            elif error.hint:
-                lines.append(error.hint)
-            else:
-                lines.append(error.message)
-
+            lines = [error.hint or error.message, f"错误码：{error.code}"]
             if error.docs_url:
                 lines.append(f"文档：{error.docs_url}")
+            if error.details:
+                lines.append(f"详情：{error.details}")
 
             await event.reply("\n".join(lines))
 
@@ -328,7 +323,9 @@ class MyPlugin(Star):
 
         # 未知错误
         else:
-            await event.reply(f"出错了：{type(error).__name__}")
+            detail = str(error).strip()
+            suffix = f": {detail}" if detail else ""
+            await event.reply(f"未处理异常：{type(error).__name__}{suffix}")
 
         # 记录详细错误
         ctx.logger.error(f"Handler failed: {error}", exc_info=error)
@@ -596,9 +593,11 @@ class CompletePlugin(Star):
     async def on_error(self, error: Exception, event, ctx) -> None:
         """错误处理"""
         if isinstance(error, AstrBotError):
-            await event.reply(error.hint or error.message)
+            await event.reply(f"{error.hint or error.message}\n错误码：{error.code}")
         else:
-            await event.reply(f"发生错误: {type(error).__name__}")
+            detail = str(error).strip()
+            suffix = f": {detail}" if detail else ""
+            await event.reply(f"未处理异常：{type(error).__name__}{suffix}")
         ctx.logger.error(f"Error: {error}", exc_info=error)
 ```
 

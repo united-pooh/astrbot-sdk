@@ -64,19 +64,46 @@ async def test_default_on_error_formats_astrbot_error_reply() -> None:
 
     assert len(event.replies) == 1
     assert "check payload" in event.replies[0]
+    assert "错误码：invalid_input" in event.replies[0]
+    assert "原因：bad payload" in event.replies[0]
     assert "https://example.com/docs" in event.replies[0]
     assert '"a": 1' in event.replies[0]
     assert '"b": 2' in event.replies[0]
 
 
 @pytest.mark.asyncio
-async def test_default_on_error_replies_generic_message_for_unknown_errors() -> None:
+async def test_default_on_error_exposes_internal_error_message_when_hint_is_placeholder():
+    event = _DummyEvent()
+    error = AstrBotError.internal_error("database unavailable", hint="请联系插件作者")
+
+    await Star.default_on_error(error, event, SimpleNamespace())
+
+    assert event.replies == ["database unavailable\n错误码：internal_error"]
+
+
+@pytest.mark.asyncio
+async def test_default_on_error_keeps_rate_limit_reply_user_friendly() -> None:
+    event = _DummyEvent()
+    error = AstrBotError.rate_limited(
+        hint="操作过于频繁，请 30 秒后再试",
+        details={"retry_after": 30},
+    )
+
+    await Star.default_on_error(error, event, SimpleNamespace())
+
+    assert len(event.replies) == 1
+    assert "操作过于频繁，请 30 秒后再试" in event.replies[0]
+    assert "错误码：rate_limited" in event.replies[0]
+    assert "handler invocation is rate limited" not in event.replies[0]
+
+
+@pytest.mark.asyncio
+async def test_default_on_error_replies_real_message_for_unknown_errors() -> None:
     event = _DummyEvent()
 
     await Star.default_on_error(RuntimeError("boom"), event, SimpleNamespace())
 
-    assert len(event.replies) == 1
-    assert event.replies[0]
+    assert event.replies == ["未处理异常：RuntimeError: boom"]
 
 
 @pytest.mark.asyncio

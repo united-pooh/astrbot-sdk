@@ -81,7 +81,7 @@ class ErrorCodes:
 | `CANCELLED` | 调用被取消 | - |
 | `PROTOCOL_VERSION_MISMATCH` | 协议版本不匹配 | 请升级 astrbot_sdk 至最新版本 |
 | `PROTOCOL_ERROR` | 协议错误 | 请检查通信双方的协议实现 |
-| `INTERNAL_ERROR` | 内部错误 | 请联系插件作者 |
+| `INTERNAL_ERROR` | 内部错误 | 默认展示 `message` |
 | `RATE_LIMITED` | 速率限制 | 操作过于频繁，请稍后再试 |
 | `COOLDOWN_ACTIVE` | 冷却中 | - |
 
@@ -261,7 +261,7 @@ def internal_error(
     cls,
     message: str,
     *,
-    hint: str = "请联系插件作者",
+    hint: str = "",
     docs_url: str = "",
     details: dict[str, Any] | None = None,
 ) -> AstrBotError
@@ -269,7 +269,7 @@ def internal_error(
 
 **参数**:
 - `message` (`str`): 详细错误消息
-- `hint` (`str`): 用户提示，默认 "请联系插件作者"
+- `hint` (`str`): 用户提示，默认留空，让默认错误处理直接展示 `message`
 - `docs_url` (`str`): 文档链接
 - `details` (`dict[str, Any] | None`): 详细信息
 
@@ -280,7 +280,6 @@ def internal_error(
 ```python
 raise AstrBotError.internal_error(
     "处理逻辑异常",
-    hint="请检查日志并联系插件作者",
     details={"traceback": "..."}
 )
 ```

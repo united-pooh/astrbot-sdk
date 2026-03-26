@@ -42,3 +42,10 @@ def test_failed_result_round_trip_preserves_error_metadata() -> None:
     assert restored.hint == error.hint
     assert restored.docs_url == error.docs_url
     assert restored.details == error.details
+
+
+def test_internal_error_defaults_to_exposing_message_via_default_handler() -> None:
+    error = AstrBotError.internal_error("database unavailable")
+
+    assert error.hint == ""
+    assert error.message == "database unavailable"
