@@ -777,7 +777,7 @@ from astrbot_sdk.clients import HTTPClient
 注册 Web API 端点。
 
 **参数**:
-- `route` (`str`): API 路由路径。当前实现会拦截包含 `..` 的路径和部分明显非法输入；建议使用以 `/` 开头、没有重复斜杠的规范化路径
+- `route` (`str`): API 路由路径。必须使用 `/{plugin_id}` 或 `/{plugin_id}/...`，当前实现也会拦截包含 `..` 的路径和明显非法输入
 - `handler_capability` (`str | None`): 处理此路由的 capability 名称
 - `handler` (`Any | None`): 使用 `@provide_capability` 标记的方法引用
 - `methods` (`list[str] | None`): HTTP 方法列表
@@ -791,14 +791,14 @@ from astrbot_sdk.decorators import provide_capability
 # 1. 声明处理 HTTP 请求的 capability
 @provide_capability(
     name="my_plugin.http_handler",
-    description="处理 /my-api 的 HTTP 请求"
+    description="处理 /my_plugin/api 的 HTTP 请求"
 )
 async def handle_http_request(request_id: str, payload: dict, cancel_token):
     return {"status": 200, "body": {"result": "ok"}}
 
 # 2. 注册路由
 await ctx.http.register_api(
-    route="/my-api",
+    route="/my_plugin/api",
     handler_capability="my_plugin.http_handler",
     methods=["GET", "POST"],
     description="我的 API"
@@ -806,7 +806,7 @@ await ctx.http.register_api(
 
 # 或使用 handler 参数
 await ctx.http.register_api(
-    route="/my-api",
+    route="/my_plugin/api",
     handler=handle_http_request,
     methods=["GET"]
 )
@@ -825,7 +825,7 @@ await ctx.http.register_api(
 **示例**:
 
 ```python
-await ctx.http.unregister_api("/my-api")
+await ctx.http.unregister_api("/my_plugin/api")
 ```
 
 ---
@@ -1796,7 +1796,7 @@ async def handle_message(event: MessageEvent, ctx: Context):
 2. 远程调用可能失败，建议使用 try-except 处理
 3. Memory 适合语义搜索，DB 适合结构化 KV，MessageHistory 适合精确保存原始消息记录
 4. DB key 在运行时按插件隔离；`list()` 和 `watch()` 返回插件本地 key 视图
-5. `HTTPClient.register_api()` 当前会拦截 `..` 等明显非法路径，但仍建议插件自行使用规范化 route；`unregister_api(route)` 默认移除该 route 下全部方法
+5. `HTTPClient.register_api()` 会强制要求 route 使用 `/{plugin_id}` 前缀，并校验 `handler_capability` 归属当前插件；`unregister_api(route)` 默认移除该 route 下全部方法
 6. 文件操作使用 file service 注册令牌
 7. 平台标识使用 UMO 格式：`"platform:instance:session_id"`
 

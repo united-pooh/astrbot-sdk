@@ -65,7 +65,7 @@ async def test_http_api_decorator_registers_and_unregisters_route(
 
 
         class HttpApiPlugin(Star):
-            @http_api(route="/decorated", methods=["GET", "POST"], description="Decorated API")
+            @http_api(route="/http_api_plugin/decorated", methods=["GET", "POST"], description="Decorated API")
             @provide_capability("http_api_plugin.handle_http", description="Handle decorated HTTP route")
             async def handle_http(self, request_id: str, payload: dict, cancel_token):
                 return {"status": 200, "body": {"request_id": request_id, "payload": payload}}
@@ -79,7 +79,7 @@ async def test_http_api_decorator_registers_and_unregisters_route(
         apis = await harness.lifecycle_context.http.list_apis()
         assert apis == [
             {
-                "route": "/decorated",
+                "route": "/http_api_plugin/decorated",
                 "methods": ["GET", "POST"],
                 "handler_capability": "http_api_plugin.handle_http",
                 "description": "Decorated API",

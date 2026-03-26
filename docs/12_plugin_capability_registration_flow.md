@@ -21,13 +21,16 @@
 
 你可以把它理解成**插件的技能清单**。
 
-### 为什么要进程隔离？
+### 为什么要有 Worker 隔离与分组边界？
 
-想象一下：插件 A 写了个死循环把进程卡死了。如果没有隔离，整个 AstrBot 都会崩掉。
+想象一下：插件 A 写了个死循环把所属 Worker 卡死了。如果没有隔离，整个 AstrBot 都会崩掉。
 
-有了进程隔离：
-- 插件 A 崩了 → 只是插件 A 不可用
-- 插件 B、C、D → 照常运行
+当前运行时既支持单插件 Worker，也支持 `GroupWorkerRuntime` 把多个兼容插件放进同一
+个 Worker。
+
+有了 Worker 边界：
+- 某个 Worker 崩了 → 只影响这个 Worker 承载的插件集合
+- 其他 Worker → 照常运行
 
 ---
 
@@ -90,7 +93,7 @@ class MyPlugin(Star):
     @on_command("hello")           # → 发现一个 handler
     async def hello(self, ...): ...
 
-    @provide_capability("calc")    # → 发现一个 capability
+    @provide_capability("my_plugin.calc")    # → 发现一个 capability
     async def calculate(self, ...): ...
 ```
 

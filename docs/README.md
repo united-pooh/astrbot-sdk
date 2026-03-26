@@ -288,7 +288,7 @@ async def handle_api(request_id: str, payload: dict, cancel_token):
     return {"status": 200, "body": {"result": "ok"}}
 
 await ctx.http.register_api(
-    route="/my-api",  # 建议使用规范化路径，避免 .. 和重复斜杠
+    route="/my_plugin/api",  # 运行时要求以 /{plugin_id} 开头
     handler=handle_api,
     methods=["GET", "POST"]
 )

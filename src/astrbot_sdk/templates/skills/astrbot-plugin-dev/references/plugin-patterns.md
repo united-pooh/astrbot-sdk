@@ -264,7 +264,7 @@ class CalcOutput(BaseModel):
 
 class CalcPlugin(Star):
     @provide_capability(
-        "calc.compute",
+        "calc_plugin.compute",
         description="Perform arithmetic",
         input_model=CalcInput,
         output_model=CalcOutput,
@@ -281,7 +281,7 @@ class CalcPlugin(Star):
 @pytest.mark.asyncio
 async def test_capability():
     async with PluginHarness.from_plugin_dir(plugin_dir) as h:
-        result = await h.invoke_capability("calc.compute", {"x": 3, "y": 4, "op": "mul"})
+        result = await h.invoke_capability("calc_plugin.compute", {"x": 3, "y": 4, "op": "mul"})
     assert result["result"] == 12.0
 ```
 

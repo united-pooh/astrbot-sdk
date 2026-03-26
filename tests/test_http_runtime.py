@@ -40,16 +40,16 @@ async def test_http_unregister_empty_methods_removes_all_for_route(
         router,
         "http.register_api",
         {
-            "route": "/demo",
+            "route": "/test-plugin/demo",
             "methods": ["GET", "POST"],
-            "handler_capability": "demo.handler",
+            "handler_capability": "test-plugin.handler",
             "description": "demo",
         },
     )
     await _call(
         router,
         "http.unregister_api",
-        {"route": "/demo", "methods": []},
+        {"route": "/test-plugin/demo", "methods": []},
     )
 
     listed = await _call(router, "http.list_apis", {})
@@ -69,16 +69,16 @@ async def test_http_unregister_subset_preserves_other_methods(
         router,
         "http.register_api",
         {
-            "route": "/demo",
+            "route": "/test-plugin/demo",
             "methods": ["GET", "POST"],
-            "handler_capability": "demo.handler",
+            "handler_capability": "test-plugin.handler",
             "description": "demo",
         },
     )
     await _call(
         router,
         "http.unregister_api",
-        {"route": "/demo", "methods": ["POST"]},
+        {"route": "/test-plugin/demo", "methods": ["POST"]},
     )
 
     listed = await _call(router, "http.list_apis", {})
@@ -86,9 +86,9 @@ async def test_http_unregister_subset_preserves_other_methods(
     assert listed == {
         "apis": [
             {
-                "route": "/demo",
+                "route": "/test-plugin/demo",
                 "methods": ["GET"],
-                "handler_capability": "demo.handler",
+                "handler_capability": "test-plugin.handler",
                 "description": "demo",
                 "plugin_id": "test-plugin",
             }
@@ -109,11 +109,53 @@ async def test_http_register_rejects_routes_with_empty_segments(
             router,
             "http.register_api",
             {
-                "route": "/foo//bar",
+                "route": "/test-plugin/foo//bar",
                 "methods": ["GET"],
-                "handler_capability": "demo.handler",
+                "handler_capability": "test-plugin.handler",
                 "description": "demo",
             },
         )
 
     assert exc_info.value.code == "invalid_input"
+
+
+@pytest.mark.asyncio
+async def test_http_register_rejects_route_outside_plugin_namespace(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    router = CapabilityRouter()
+
+    with pytest.raises(AstrBotError, match="公开命名空间前缀"):
+        await _call(
+            router,
+            "http.register_api",
+            {
+                "route": "/status",
+                "methods": ["GET"],
+                "handler_capability": "test-plugin.handler",
+                "description": "demo",
+            },
+        )
+
+
+@pytest.mark.asyncio
+async def test_http_register_rejects_foreign_handler_capability(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    router = CapabilityRouter()
+
+    with pytest.raises(AstrBotError, match="handler_capability 属于当前插件"):
+        await _call(
+            router,
+            "http.register_api",
+            {
+                "route": "/test-plugin/status",
+                "methods": ["GET"],
+                "handler_capability": "other-plugin.handler",
+                "description": "demo",
+            },
+        )
