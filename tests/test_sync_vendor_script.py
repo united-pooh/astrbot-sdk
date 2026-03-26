@@ -18,7 +18,7 @@ def _load_sync_vendor_module():
     return module
 
 
-def test_build_vendor_snapshot_keeps_runtime_only_src_layout(tmp_path: Path):
+def test_build_vendor_snapshot_keeps_runtime_and_testing_contract(tmp_path: Path):
     module = _load_sync_vendor_module()
     repo_root = tmp_path / "repo"
     src_package = repo_root / "src" / "astrbot_sdk"
@@ -85,10 +85,24 @@ dev = ["pytest>=8.0.0", "ruff>=0.4.0"]
     assert "[project.optional-dependencies]" not in vendored_pyproject
     assert "[tool.setuptools.package-data]" not in vendored_pyproject
     assert not (vendor_root / "src" / "astrbot_sdk" / "__pycache__").exists()
-    assert not (vendor_root / "src" / "astrbot_sdk" / "testing.py").exists()
-    assert not (vendor_root / "src" / "astrbot_sdk" / "_testing_support.py").exists()
+    assert (vendor_root / "src" / "astrbot_sdk" / "testing.py").exists()
+    assert (vendor_root / "src" / "astrbot_sdk" / "_testing_support.py").exists()
     assert not (vendor_root / "src" / "astrbot_sdk" / "AGENTS.md").exists()
-    assert not (
+    assert (
         vendor_root / "src" / "astrbot_sdk" / "_internal" / "testing_support.py"
     ).exists()
     assert not (vendor_root / "src" / "astrbot_sdk" / "templates" / "skills").exists()
+
+
+def test_cli_test_template_dependency_remains_in_vendored_contract():
+    module = _load_sync_vendor_module()
+    cli_source = (Path(__file__).resolve().parent.parent / "src" / "astrbot_sdk" / "cli.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "from astrbot_sdk.testing import MockContext, MockMessageEvent, PluginHarness" in cli_source
+    assert Path("testing.py") not in module.PACKAGE_EXCLUDE_RELATIVE_PATHS
+    assert Path("_testing_support.py") not in module.PACKAGE_EXCLUDE_RELATIVE_PATHS
+    assert (
+        Path("_internal") / "testing_support.py"
+    ) not in module.PACKAGE_EXCLUDE_RELATIVE_PATHS
