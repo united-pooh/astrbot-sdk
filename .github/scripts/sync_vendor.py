@@ -52,9 +52,9 @@ EXPECTED_TOP_LEVEL = {
     "pyproject.toml",
 }
 FORBIDDEN_PARTS = {"tests", "docs", ".github"}
-SRC_LAYOUT_MARKER = '# Package Discovery (src layout)'
+SRC_LAYOUT_MARKER = "# Package Discovery (src layout)"
 SRC_DISCOVERY_LINE = 'where = ["src"]'
-VENDOR_LAYOUT_MARKER = '# Package Discovery (vendor layout)'
+VENDOR_LAYOUT_MARKER = "# Package Discovery (vendor layout)"
 VENDOR_DISCOVERY_BLOCK = 'where = ["."]\ninclude = ["astrbot_sdk*"]'
 
 
@@ -81,9 +81,13 @@ def build_vendor_pyproject(root_pyproject_text: str) -> str:
     if SRC_LAYOUT_MARKER not in root_pyproject_text:
         fail("root pyproject.toml is missing the expected src layout marker")
     if SRC_DISCOVERY_LINE not in root_pyproject_text:
-        fail("root pyproject.toml is missing the expected setuptools src discovery line")
+        fail(
+            "root pyproject.toml is missing the expected setuptools src discovery line"
+        )
 
-    vendor_pyproject = root_pyproject_text.replace(SRC_LAYOUT_MARKER, VENDOR_LAYOUT_MARKER, 1)
+    vendor_pyproject = root_pyproject_text.replace(
+        SRC_LAYOUT_MARKER, VENDOR_LAYOUT_MARKER, 1
+    )
     vendor_pyproject = vendor_pyproject.replace(
         SRC_DISCOVERY_LINE,
         VENDOR_DISCOVERY_BLOCK,

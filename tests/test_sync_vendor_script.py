@@ -5,7 +5,12 @@ from pathlib import Path
 
 
 def _load_sync_vendor_module():
-    script_path = Path(__file__).resolve().parent.parent / ".github" / "scripts" / "sync_vendor.py"
+    script_path = (
+        Path(__file__).resolve().parent.parent
+        / ".github"
+        / "scripts"
+        / "sync_vendor.py"
+    )
     spec = importlib.util.spec_from_file_location("sync_vendor_script", script_path)
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
@@ -53,7 +58,7 @@ astrbot_sdk = ["templates/skills/*/SKILL.md"]
         "pyproject.toml",
     }
     vendored_pyproject = (vendor_root / "pyproject.toml").read_text(encoding="utf-8")
-    assert '# Package Discovery (vendor layout)' in vendored_pyproject
+    assert "# Package Discovery (vendor layout)" in vendored_pyproject
     assert 'where = ["."]' in vendored_pyproject
     assert 'include = ["astrbot_sdk*"]' in vendored_pyproject
     assert 'where = ["src"]' not in vendored_pyproject
