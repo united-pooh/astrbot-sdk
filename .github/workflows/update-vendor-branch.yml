@@ -37,14 +37,15 @@ jobs:
 
       - name: Create local vendor refresh commit when needed
         run: |
-          if git diff --quiet -- vendor; then
+          # git diff alone only sees tracked files; stage first so new files are detected.
+          git add vendor/
+          if git diff --quiet --cached -- vendor; then
             echo "vendor/ is already up to date for this source commit."
             exit 0
           fi
 
           # git subtree split only sees committed history, so the workflow needs
           # a local commit when vendor/ was regenerated in the job workspace.
-          git add vendor
           git commit -m "chore: refresh vendor snapshot [skip ci]"
 
       - name: Build vendor-branch from vendor subtree
