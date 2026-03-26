@@ -18,14 +18,29 @@ def _load_sync_vendor_module():
     return module
 
 
-def test_build_vendor_snapshot_preserves_src_layout_pyproject(tmp_path: Path):
+def test_build_vendor_snapshot_keeps_runtime_only_src_layout(tmp_path: Path):
     module = _load_sync_vendor_module()
     repo_root = tmp_path / "repo"
     src_package = repo_root / "src" / "astrbot_sdk"
     cached_dir = src_package / "__pycache__"
+    skill_templates = (
+        src_package / "templates" / "skills" / "astrbot-plugin-dev" / "references"
+    )
 
     cached_dir.mkdir(parents=True)
+    skill_templates.mkdir(parents=True)
     (src_package / "__init__.py").write_text("__all__ = ['demo']\n", encoding="utf-8")
+    (src_package / "testing.py").write_text("TESTING = True\n", encoding="utf-8")
+    (src_package / "_testing_support.py").write_text(
+        "SUPPORT = True\n", encoding="utf-8"
+    )
+    (src_package / "AGENTS.md").write_text("internal notes\n", encoding="utf-8")
+    (src_package / "_internal").mkdir(parents=True)
+    (src_package / "_internal" / "testing_support.py").write_text(
+        "SUPPORT = True\n",
+        encoding="utf-8",
+    )
+    (skill_templates / "api-quick-ref.md").write_text("reference\n", encoding="utf-8")
     (cached_dir / "ignored.pyc").write_bytes(b"cache")
     (repo_root / "LICENSE").write_text("demo license\n", encoding="utf-8")
     (repo_root / "pyproject.toml").write_text(
@@ -42,6 +57,12 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 astrbot_sdk = ["templates/skills/*/SKILL.md"]
+
+[tool.pytest.ini_options]
+markers = ["unit"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0.0", "ruff>=0.4.0"]
 """.strip()
         + "\n",
         encoding="utf-8",
@@ -60,5 +81,14 @@ astrbot_sdk = ["templates/skills/*/SKILL.md"]
     vendored_pyproject = (vendor_root / "pyproject.toml").read_text(encoding="utf-8")
     assert "# Package Discovery (src layout)" in vendored_pyproject
     assert 'where = ["src"]' in vendored_pyproject
-    assert 'include = ["astrbot_sdk*"]' not in vendored_pyproject
+    assert "[tool.pytest.ini_options]" not in vendored_pyproject
+    assert "[project.optional-dependencies]" not in vendored_pyproject
+    assert "[tool.setuptools.package-data]" not in vendored_pyproject
     assert not (vendor_root / "src" / "astrbot_sdk" / "__pycache__").exists()
+    assert not (vendor_root / "src" / "astrbot_sdk" / "testing.py").exists()
+    assert not (vendor_root / "src" / "astrbot_sdk" / "_testing_support.py").exists()
+    assert not (vendor_root / "src" / "astrbot_sdk" / "AGENTS.md").exists()
+    assert not (
+        vendor_root / "src" / "astrbot_sdk" / "_internal" / "testing_support.py"
+    ).exists()
+    assert not (vendor_root / "src" / "astrbot_sdk" / "templates" / "skills").exists()
