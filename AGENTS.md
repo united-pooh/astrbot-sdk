@@ -28,7 +28,7 @@
 
 - 仓库采用 `src` 布局，SDK 真正源码目录是 `src/astrbot_sdk`，不是仓库根下的 `astrbot_sdk/`。
 - 维护给 AstrBot 主仓库 subtree 使用的 `vendor/` 快照时，必须保留完整 `vendor/src/astrbot_sdk/` 布局；`vendor/pyproject.toml` 也必须保留原始 `src` 包发现配置，不要混入根目录 `tests/`、`docs/`、`.github/` 等开发仓库内容。
-- `vendor/src/astrbot_sdk/` 也不能机械地把源包整个复制过去；像 `testing.py`、`_testing_support.py`、包内 `AGENTS.md`、`templates/skills/**` 这类测试/开发辅助内容不属于 AstrBot 运行时 vendored 子集。
+- `vendor/src/astrbot_sdk/` 也不能机械地把源包整个复制过去；`AGENTS.md`、`templates/skills/**` 这类开发辅助内容不属于 vendored 子集，但 `testing.py`、`_testing_support.py`、`_internal/testing_support.py` 当前仍属于 AstrBot subtree 消费端依赖的最小 testing helper 契约。
 
 ### 仓库工具文件注意事项
 

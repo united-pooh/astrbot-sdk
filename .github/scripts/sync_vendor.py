@@ -18,8 +18,10 @@ VENDOR_README = dedent(
     This directory is the minimized subtree payload consumed by the AstrBot main
     repository.
 
-    - `src/astrbot_sdk/` keeps only the runtime SDK package contents required by AstrBot
-    - testing helpers, developer templates, and embedded markdown reference files are excluded
+    - `src/astrbot_sdk/` keeps the runtime SDK package plus the minimal testing
+      helpers that AstrBot and SDK-generated templates still treat as part of the
+      vendored contract
+    - developer templates and embedded markdown reference files are excluded
     - `pyproject.toml` keeps the src-layout package discovery but drops dev/test-only metadata
     - `VENDORED.md` describes the vendoring contract
     - tests, docs, CI files, and other source-repo-only content stay outside this directory
@@ -34,10 +36,12 @@ VENDORED_NOTICE = dedent(
     via `git subtree`.
 
     - The source of truth is this `astrbot-sdk` repository.
-    - `vendor/src/astrbot_sdk/` is synchronized from `src/astrbot_sdk/`, but only for
-      the runtime SDK subset consumed by AstrBot.
-    - vendored snapshots exclude testing helpers, developer skill templates, and
-      markdown reference assets that are not needed at runtime.
+    - `vendor/src/astrbot_sdk/` is synchronized from `src/astrbot_sdk/`.
+    - Vendored snapshots keep the runtime SDK plus the minimal testing helpers
+      (`testing.py`, `_testing_support.py`, `_internal/testing_support.py`) because
+      AstrBot and SDK-generated test templates still depend on them.
+    - Vendored snapshots exclude developer skill templates and markdown reference
+      assets that are not needed by the subtree consumer.
     - `vendor/pyproject.toml` keeps src-layout package discovery, but strips
       test/dev-only sections so the subtree stays runtime-focused.
     - Do not edit vendored files directly inside the AstrBot main repository.
@@ -65,9 +69,6 @@ PYPROJECT_SECTIONS_TO_DROP = (
 )
 PACKAGE_EXCLUDE_RELATIVE_PATHS = (
     Path("AGENTS.md"),
-    Path("testing.py"),
-    Path("_testing_support.py"),
-    Path("_internal") / "testing_support.py",
     Path("templates") / "skills",
 )
 
