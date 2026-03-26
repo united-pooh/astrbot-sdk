@@ -58,3 +58,5 @@ plugins/
 .serena/
 !.github/scripts/
 !.github/scripts/**
+.github/scripts/**/__pycache__/
+.github/scripts/**/*.py[cod]
