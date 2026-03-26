@@ -62,3 +62,5 @@ plugins/
 !.github/scripts/**
 .github/scripts/**/__pycache__/
 .github/scripts/**/*.py[cod]
+
+*.whl
