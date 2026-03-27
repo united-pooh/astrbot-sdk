@@ -2,6 +2,7 @@
 
 > 作者：whatevertogo
 > 生成日期：2026-03-19
+> 最后更新：2026-03-27
 
 ---
 
@@ -12,9 +13,8 @@
 3. [协议层设计](#协议层设计)
 4. [运行时架构](#运行时架构)
 5. [客户端层设计](#客户端层设计)
-6. [插件开发指南](#插件开发指南)
-7. [关键设计模式](#关键设计模式)
-8. [文档与资源](#文档与资源)
+6. [关键设计模式](#关键设计模式)
+7. [文档与资源](#文档与资源)
 
 ---
 
@@ -30,7 +30,7 @@ AstrBot SDK 是一个基于 Python 3.12+ 的机器人插件开发框架，采用
 | **环境分组** | 多插件可共享同一 Python 虚拟环境，节省资源 |
 | **能力路由** | 显式声明的 Capability 系统，支持 JSON Schema 验证 |
 | **流式支持** | 原生支持流式 LLM 调用和增量结果返回 |
-| **协议优先** | 基于 v4 协议的统一通信模型，支持多种传输方式 |(未完成)
+| **协议优先** | 基于 v4 协议的统一通信模型，支持 Stdio/WebSocket 等多种传输方式 |
 
 ### 技术栈
 
@@ -52,25 +52,31 @@ AstrBot SDK 是一个基于 Python 3.12+ 的机器人插件开发框架，采用
 │                   用户层 (Plugin Developer)                    │
 ├─────────────────────────────────────────────────────────────────┤
 │  v4 入口:  astrbot_sdk.{Star, Context, MessageEvent}           │
-│  装饰器:   on_command, on_message, on_event, on_schedule       │
-│           provide_capability, require_admin                     │
-│  过滤器:   PlatformFilter, MessageTypeFilter, CustomFilter      │
-│  命令组:   CommandGroup, command_group                          │
-│  会话:     MessageSession, session_waiter                       │
+│  消息链:   MessageChain, MessageBuilder, MessageEventResult    │
+│  消息组件: Plain, Image, At, AtAll, File, Video, Record, ...   │
+│  触发器:   on_command, on_message, on_event, on_schedule,      │
+│           conversation_command                                  │
+│  权限:     require_admin, admin_only, require_permission,      │
+│           platforms, group_only, private_only                   │
+│  限流:     rate_limit, cooldown                                 │
+│  能力导出: provide_capability, register_llm_tool,              │
+│           register_agent, http_api, mcp_server, register_skill │
+│  其他:     priority, validate_config, on_provider_change,      │
+│           background_task, acknowledge_global_mcp_risk          │
+│  过滤器:   PlatformFilter, MessageTypeFilter, CustomFilter,    │
+│           all_of, any_of, custom_filter                         │
+│  会话:     MessageSession, session_waiter, SessionController   │
+│  工具:     StarTools, PluginKVStoreMixin, CommandGroup         │
+│  对话:     ConversationSession, ConversationState              │
 └────────────────────┬────────────────────────────────────────────┘
                    │
 ┌──────────────────▼─────────────────────────────────────────────┐
 │                 高层 API (High-Level API)                      │
 ├─────────────────────────────────────────────────────────────────┤
-│  能力客户端 (通过 CapabilityProxy 调用):                       │
-│    - LLMClient        (llm.chat, llm.chat_raw, llm.stream_chat)│
-│    - MemoryClient     (memory.search, memory.save, memory.stats, │
-│                        memory.list_keys, memory.exists,         │
-│                        memory.clear_namespace, memory.count)    │
-│    - DBClient         (db.get, db.set, db.watch, db.list)      │
-│    - PlatformClient   (platform.send, platform.send_image, ...)│
-│    - HTTPClient       (http.register_api, http.list_apis)      │
-│    - MetadataClient   (metadata.get_plugin, metadata.list_plugins)│
+│  能力客户端 (通过 CapabilityProxy → Peer → Transport 调用):    │
+│    LLMClient / MemoryClient / DBClient / PlatformClient        │
+│    HTTPClient / MetadataClient / FileServiceClient             │
+│    以及管理类客户端 (conversation, persona, kb, provider, ...)  │
 └────────────────────┬────────────────────────────────────────────┘
                    │
 ┌──────────────────▼─────────────────────────────────────────────┐
@@ -126,10 +132,10 @@ v4 协议定义了 5 种消息类型：
 
 | 消息类型 | 用途 | 关键字段 |
 |---------|------|---------|
-| `InitializeMessage` | 握手初始化 | `protocol_version`, `peer`, `handlers`, `provided_capabilities` |
+| `InitializeMessage` | 握手初始化 | `protocol_version`, `peer`, `handlers`, `provided_capabilities`, `metadata`（可选）|
 | `InvokeMessage` | 调用能力 | `capability`, `input`, `stream`, `caller_plugin_id` |
 | `ResultMessage` | 返回结果 | `success`, `output`, `error`, `kind` |
-| `EventMessage` | 流式事件 | `phase` (started/delta/completed/failed), `data` |
+| `EventMessage` | 流式事件 | `phase` (started/delta/completed/failed), `data`, `output`（completed 时）, `error`（failed 时）|
 | `CancelMessage` | 取消调用 | `reason` |
 
 ### 错误模型
@@ -139,6 +145,8 @@ v4 协议定义了 5 种消息类型：
 - `message`: 开发者信息
 - `hint`: 用户友好提示
 - `retryable`: 是否可重试
+- `docs_url`: （可选）文档链接
+- `details`: （可选）结构化调试详情
 
 ### 握手流程
 
@@ -191,85 +199,6 @@ Worker (Plugin)                 Supervisor (Core)
 | `EventTrigger` | event_type | 事件触发 |
 | `ScheduleTrigger` | cron, interval_seconds | 定时触发 |
 
-### 内置 Capabilities
-
-#### LLM 命名空间
-
-| 能力 | 说明 |
-|------|------|
-| `llm.chat` | 同步对话，返回文本 |
-| `llm.chat_raw` | 同步对话，返回完整响应 |
-| `llm.stream_chat` | 流式对话 |
-
-#### Memory 命名空间
-
-| 能力 | 说明 |
-|------|------|
-| `memory.search` | 语义搜索记忆 |
-| `memory.save` | 保存记忆 |
-| `memory.save_with_ttl` | 保存带过期时间的记忆 |
-| `memory.get` / `get_many` | 读取记忆 |
-| `memory.list_keys` / `memory.exists` | 枚举与检查记忆键 |
-| `memory.delete` / `delete_many` | 删除记忆 |
-| `memory.clear_namespace` / `memory.count` | 管理 namespace 中的记忆 |
-| `memory.stats` | 获取统计信息 |
-
-#### DB 命名空间
-
-| 能力 | 说明 |
-|------|------|
-| `db.get` / `get_many` | 读取 KV |
-| `db.set` / `set_many` | 写入 KV |
-| `db.delete` | 删除 KV |
-| `db.list` | 列出当前插件命名空间内的键（支持前缀过滤） |
-| `db.watch` | 订阅当前插件命名空间内的变更（流式） |
-
-#### Message History 命名空间
-
-| 能力 | 说明 |
-|------|------|
-| `message_history.list` | 分页读取会话消息历史 |
-| `message_history.get_by_id` | 按 ID 读取单条消息历史 |
-| `message_history.append` | 追加消息历史记录 |
-| `message_history.delete_before` | 删除某时间点之前的记录 |
-| `message_history.delete_after` | 删除某时间点之后的记录 |
-| `message_history.delete_all` | 删除会话内全部消息历史 |
-
-#### Platform 命名空间
-
-| 能力 | 说明 |
-|------|------|
-| `platform.send` | 发送文本消息 |
-| `platform.send_image` | 发送图片 |
-| `platform.send_chain` | 发送消息链 |
-| `platform.get_members` | 获取群成员 |
-
-#### HTTP 命名空间
-
-| 能力 | 说明 |
-|------|------|
-| `http.register_api` | 注册 HTTP API 端点；要求 route 使用 `/{plugin_id}` 前缀，并拦截 `..` 等明显非法路径 |
-| `http.unregister_api` | 注销 HTTP API 端点；不传 methods 时移除该 route 的全部方法 |
-| `http.list_apis` | 列出已注册的 API |
-
-#### Metadata 命名空间
-
-| 能力 | 说明 |
-|------|------|
-| `metadata.get_plugin` | 获取单个插件元数据 |
-| `metadata.list_plugins` | 列出所有插件元数据 |
-| `metadata.get_plugin_config` | 获取当前插件配置 |
-
-#### System 命名空间
-
-| 能力 | 说明 |
-|------|------|
-| `system.get_data_dir` | 获取插件数据目录 |
-| `system.text_to_image` | 文本转图片 |
-| `system.html_render` | 渲染 HTML 模板 |
-| `system.session_waiter.*` | 会话等待器管理 |
-| `system.event.*` | 表情回应、输入状态、流式消息 |
-
 ---
 
 ## 运行时架构
@@ -308,11 +237,15 @@ Worker (Plugin)                 Supervisor (Core)
 
 | 组件 | 职责 |
 |------|------|
-| **SupervisorRuntime** | 管理多个 Worker 进程，聚合所有 handler |
-| **WorkerSession** | 管理单个 Worker 进程的生命周期 |
-| **PluginWorkerRuntime** | Worker 进程内的插件加载与执行 |
-| **HandlerDispatcher** | 将 handler.invoke 请求转成真实 Python 调用 |
-| **CapabilityRouter** | 能力注册、发现和执行路由 |
+| **SupervisorRuntime** | 管理多个 Worker 进程，聚合所有 handler，路由 Core 调用到对应 Worker |
+| **WorkerSession** | 管理单个 Worker 进程的生命周期，处理连接关闭和重连 |
+| **PluginWorkerRuntime** | Worker 进程内加载单个插件，分发 handler 调用 |
+| **GroupWorkerRuntime** | 在同一 Worker 进程中承载多个兼容插件，聚合 handlers 和 capabilities |
+| **HandlerDispatcher** | 将 handler.invoke 请求转成真实 Python 调用，支持参数注入 |
+| **CapabilityDispatcher** | 插件提供的能力调用分发 |
+| **CapabilityRouter** | 能力注册、发现和执行路由，支持 JSON Schema 验证 |
+| **EnvironmentGroup** | 环境分组数据结构，支持多插件共享同一 Python 环境 |
+| **PluginEnvironmentManager** | 插件环境管理和规划，支持环境分组策略 |
 
 ### 参数注入优先级
 
@@ -326,152 +259,58 @@ HandlerDispatcher 支持参数注入，优先级为：
 
 ## 客户端层设计
 
-### 客户端架构
+### 调用链路
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    User Plugin                            │
-│  ctx.llm.chat() / ctx.memory.save() / ctx.db.set()        │
-└────────────┬──────────────────────────────────────────────┘
+│                    User Plugin                              │
+│  ctx.llm.chat() / ctx.memory.save() / ctx.db.set()         │
+└────────────┬────────────────────────────────────────────────┘
              │
-┌────────────▼──────────────────────────────────────────────┐
-│               CapabilityProxy                              │
-│  - call(name, payload)      普通调用                       │
-│  - stream(name, payload)    流式调用                       │
-└────────────┬──────────────────────────────────────────────┘
+┌────────────▼────────────────────────────────────────────────┐
+│               CapabilityProxy                               │
+│  - call(name, payload)      普通调用                        │
+│  - stream(name, payload)    流式调用                        │
+└────────────┬────────────────────────────────────────────────┘
              │
-┌────────────▼──────────────────────────────────────────────┐
-│                    Peer                                   │
-│  - invoke(capability, payload)                            │
-│  - invoke_stream(capability, payload)                      │
-└────────────┬──────────────────────────────────────────────┘
+┌────────────▼────────────────────────────────────────────────┐
+│                    Peer                                     │
+│  - invoke(capability, payload)                              │
+│  - invoke_stream(capability, payload)                       │
+└────────────┬────────────────────────────────────────────────┘
              │
-┌────────────▼──────────────────────────────────────────────┐
-│                 Transport                                 │
-│  - send(json_string)                                      │
+┌────────────▼────────────────────────────────────────────────┐
+│                 Transport                                   │
+│  - send(json_string)                                       │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 ### 客户端一览
 
-| 客户端 | 主要方法 | 对应 Capability |
-|--------|---------|-----------------|
-| `LLMClient` | `chat()`, `chat_raw()`, `stream_chat()` | `llm.*` |
-| `MemoryClient` | `search()`, `save()`, `save_with_ttl()`, `get()`, `list_keys()`, `exists()`, `get_many()`, `delete()`, `clear_namespace()`, `delete_many()`, `count()`, `stats()` | `memory.*` |
-| `DBClient` | `get()`, `set()`, `get_many()`, `set_many()`, `delete()`, `list()`, `watch()` | `db.*` |
-| `MessageHistoryManagerClient` | `list()`, `get()`, `append()`, `delete_before()`, `delete_after()`, `delete_all()` | `message_history.*` |
-| `PlatformClient` | `send()`, `send_image()`, `send_chain()`, `get_members()` | `platform.*` |
-| `HTTPClient` | `register_api()`, `unregister_api()`, `list_apis()` | `http.*` |
-| `MetadataClient` | `get_plugin()`, `list_plugins()`, `get_current_plugin()`, `get_plugin_config()` | `metadata.*` |
+> 完整 API 参考：`src/astrbot_sdk/context.py`（属性定义）、`src/astrbot_sdk/clients/`（客户端实现）。
 
----
-
-## 插件开发指南
-
-### v4 原生插件示例
-
-#### plugin.yaml
-
-```yaml
-_schema_version: 2
-name: my_plugin
-author: your_name
-version: 1.0.0
-runtime:
-  python: "3.12"
-components:
-  - class: main:MyPlugin
-```
-
-#### main.py
-
-```python
-from astrbot_sdk import Star, Context, MessageEvent
-from astrbot_sdk.decorators import on_command, on_message, provide_capability
-
-class MyPlugin(Star):
-    # 命令处理器
-    @on_command("hello", aliases=["hi"])
-    async def hello(self, event: MessageEvent, ctx: Context) -> None:
-        await event.reply(f"你好，{event.user_id}！")
-
-    # 消息处理器
-    @on_message(keywords=["帮助"])
-    async def help(self, event: MessageEvent, ctx: Context) -> None:
-        await event.reply("可用命令：hello, help")
-
-    # 提供能力
-    @provide_capability(
-        "my_plugin.calculate",
-        description="执行计算",
-        input_schema={
-            "type": "object",
-            "properties": {"x": {"type": "number"}},
-            "required": ["x"]
-        },
-        output_schema={
-            "type": "object",
-            "properties": {"result": {"type": "number"}},
-            "required": ["result"]
-        }
-    )
-    async def calculate_capability(self, payload: dict, ctx: Context) -> dict:
-        x = payload.get("x", 0)
-        return {"result": x * 2}
-```
-
-### 生命周期钩子
-
-| 钩子 | 说明 |
-|------|------|
-| `on_start()` | 插件启动时调用 |
-| `on_stop()` | 插件停止时调用 |
-| `on_error(exc, event, ctx)` | Handler 执行出错时调用 |
-
-### 常用功能速查
-
-#### 1. LLM 对话
-
-```python
-# 简单对话
-reply = await ctx.llm.chat("你好")
-
-# 带历史对话
-from astrbot_sdk.clients.llm import ChatMessage
-history = [ChatMessage(role="user", content="我叫小明")]
-reply = await ctx.llm.chat("你记得我吗？", history=history)
-
-# 流式对话
-async for chunk in ctx.llm.stream_chat("讲个故事"):
-    print(chunk, end="")
-```
-
-#### 2. 数据持久化
-
-```python
-# DB 客户端（精确匹配）
-await ctx.db.set("user:123", {"name": "Alice"})
-data = await ctx.db.get("user:123")
-
-# Memory 客户端（语义搜索）
-await ctx.memory.save("user_pref", {"theme": "dark"})
-results = await ctx.memory.search("用户喜欢什么颜色")
-```
-
-#### 3. 消息发送
-
-```python
-# 简单文本
-await ctx.platform.send(event.session_id, "消息内容")
-
-# 图片
-await ctx.platform.send_image(event.session_id, "https://example.com/img.jpg")
-
-# 消息链
-from astrbot_sdk.message.components import Plain, Image
-chain = [Plain("文字"), Image(url="https://example.com/img.jpg")]
-await ctx.platform.send_chain(event.session_id, chain)
-```
+| Context 属性 | 客户端类 | 对应 Capability 命名空间 |
+|-------------|---------|------------------------|
+| `ctx.llm` | `LLMClient` | `llm.*` |
+| `ctx.memory` | `MemoryClient` | `memory.*` |
+| `ctx.db` | `DBClient` | `db.*` |
+| `ctx.platform` | `PlatformClient` | `platform.*` |
+| `ctx.http` | `HTTPClient` | `http.*` |
+| `ctx.metadata` | `MetadataClient` | `metadata.*` |
+| `ctx.files` | `FileServiceClient` | `system.file.*` |
+| `ctx.message_history` | `MessageHistoryManagerClient` | `message_history.*` |
+| `ctx.conversations` | `ConversationManagerClient` | `conversation.*` |
+| `ctx.personas` | `PersonaManagerClient` | `persona.*` |
+| `ctx.kbs` | `KnowledgeBaseManagerClient` | `kb.*` |
+| `ctx.providers` | `ProviderClient` | `provider.*` |
+| `ctx.provider_manager` | `ProviderManagerClient` | `provider.manager.*` |
+| `ctx.permission` | `PermissionClient` | `permission.*` |
+| `ctx.permission_manager` | `PermissionManagerClient` | `permission.manager.*` |
+| `ctx.mcp` | `MCPManagerClient` | `mcp.*` |
+| `ctx.skills` | `SkillClient` | `skill.*` |
+| `ctx.session_plugins` | `SessionPluginManager` | `session.plugin.*` |
+| `ctx.session_services` | `SessionServiceManager` | `session.service.*` |
+| `ctx.registry` | `RegistryClient` | 内部使用 |
 
 ---
 
@@ -526,7 +365,7 @@ await ctx.platform.send_chain(event.session_id, chain)
 
 ### 完整文档目录
 
-SDK 文档按学习路径组织，位于 `src/astrbot_sdk/docs/`：
+SDK 文档按学习路径组织，位于项目根目录的 `docs/` 文件夹：
 
 | 级别 | 文档 | 内容 |
 |------|------|------|
@@ -542,6 +381,7 @@ SDK 文档按学习路径组织，位于 `src/astrbot_sdk/docs/`：
 | **高级** | 09_api_reference.md | 完整 API 索引 |
 | | 10_migration_guide.md | 迁移指南 |
 | | 11_security_checklist.md | 安全检查清单 |
+| | 12_plugin_capability_registration_flow.md | 插件能力注册流程 |
 | | PROJECT_ARCHITECTURE.md | 架构设计文档 |
 
 ### 关键文件速查
@@ -551,20 +391,28 @@ SDK 文档按学习路径组织，位于 `src/astrbot_sdk/docs/`：
 | `astrbot_sdk/__init__.py` | `Star`, `Context`, `MessageEvent` | 顶层入口 |
 | `astrbot_sdk/star.py` | `Star` | v4 原生插件基类 |
 | `astrbot_sdk/context.py` | `Context` | 运行时上下文 |
-| `astrbot_sdk/decorators.py` | `on_command`, `on_message` | v4 装饰器 |
+| `astrbot_sdk/decorators.py` | 所有装饰器 | v4 装饰器定义 |
+| `astrbot_sdk/filters.py` | `PlatformFilter`, `MessageTypeFilter` | 过滤器定义 |
 | `astrbot_sdk/errors.py` | `AstrBotError` | 统一错误模型 |
+| `astrbot_sdk/events.py` | `MessageEvent` | 事件模型 |
+| `astrbot_sdk/message/components.py` | `Plain`, `Image`, `At` | 消息组件 |
+| `astrbot_sdk/message_components.py` | 兼容性导出 | 向后兼容（建议使用 message/components.py）|
 | `astrbot_sdk/runtime/peer.py` | `Peer` | 协议对等端 |
+| `astrbot_sdk/runtime/transport.py` | `Transport`, `StdioTransport` | 传输层抽象 |
 | `astrbot_sdk/runtime/capability_router.py` | `CapabilityRouter` | Capability 路由 |
+| `astrbot_sdk/runtime/handler_dispatcher.py` | `HandlerDispatcher` | Handler 分发 |
+| `astrbot_sdk/runtime/supervisor.py` | `SupervisorRuntime`, `WorkerSession` | Supervisor 运行时 |
+| `astrbot_sdk/runtime/worker.py` | `PluginWorkerRuntime`, `GroupWorkerRuntime` | Worker 运行时 |
 | `astrbot_sdk/clients/llm.py` | `LLMClient` | LLM 客户端 |
 
 ### 版本信息
 
-- **SDK 版本**: v4.0
-- **协议版本**: P0.6
+- **SDK 架构版本**: v4
+- **协议版本**: 1.0
 - **Python 要求**: >=3.12
 - **推荐版本**: 3.12+
 
 ---
 
 > 本文档基于 AstrBot SDK v4 架构文档整理
-> 详细内容请查阅 `src/astrbot_sdk/docs/` 目录下的完整文档
+> 详细内容请查阅项目根目录 `docs/` 目录下的完整文档
