@@ -71,6 +71,8 @@ def test_init_generates_claude_agent_directory() -> None:
         assert "Plugin root: `../../..`" in content
         assert "AstrBotError" in content
         assert "ErrorCodes" in content
+        assert "verified minimum compatible version" in content
+        assert "upper bound or exclusion" in content
         assert (
             plugin_dir
             / ".claude"
