@@ -11,6 +11,9 @@
 """
 from __future__ import annotations
 
+from pathlib import Path
+from textwrap import dedent
+
 import pytest
 
 from astrbot_sdk.decorators import (
@@ -26,6 +29,37 @@ def _get_trigger(func) -> CommandTrigger:
     trigger = meta.trigger
     assert isinstance(trigger, CommandTrigger)
     return trigger
+
+
+def _write_plugin(
+    plugin_dir: Path,
+    *,
+    name: str,
+    class_name: str,
+    source: str,
+) -> None:
+    """写入 plugin.yaml + main.py，使用正确的 manifest v2 格式。"""
+    plugin_dir.mkdir(parents=True, exist_ok=True)
+    (plugin_dir / "plugin.yaml").write_text(
+        dedent(
+            f"""
+            _schema_version: 2
+            name: {name}
+            author: tests
+            version: 1.0.0
+            desc: command group tests
+
+            runtime:
+              python: "3.12"
+
+            components:
+              - class: main:{class_name}
+            """
+        ).strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    (plugin_dir / "main.py").write_text(source, encoding="utf-8")
 
 
 # ── 1. 基线：无 group 时行为不变 ──────────────────────────────────
@@ -247,48 +281,43 @@ def test_conversation_command_without_group_no_route():
 @pytest.mark.asyncio
 async def test_on_command_group_dispatch_through_harness(tmp_path):
     """带 group 的命令可以通过完整路径触发 dispatch。"""
-    from pathlib import Path
-
+    from astrbot_sdk.errors import AstrBotError
     from astrbot_sdk.testing import PluginHarness
 
     plugin_dir = tmp_path / "group_plugin"
-    plugin_dir.mkdir(parents=True, exist_ok=True)
-    (plugin_dir / "plugin.yaml").write_text(
-        "_schema_version: 2\nname: group_plugin\nauthor: tests\nversion: 1.0.0\n",
-        encoding="utf-8",
-    )
-    (plugin_dir / "main.py").write_text(
-        """
-from astrbot_sdk import Context, MessageEvent, Star
-from astrbot_sdk.decorators import on_command
+    _write_plugin(
+        plugin_dir,
+        name="group_plugin",
+        class_name="GroupPlugin",
+        source=dedent("""
+            from astrbot_sdk import Context, MessageEvent, Star
+            from astrbot_sdk.decorators import on_command
 
 
-class GroupPlugin(Star):
-    @on_command("ban", aliases=["block"], group="admin", description="封禁用户")
-    async def admin_ban(self, event: MessageEvent, ctx: Context) -> None:
-        await event.reply(f"banned:{event.text}")
+            class GroupPlugin(Star):
+                @on_command("ban", aliases=["block"], group="admin", description="封禁用户")
+                async def admin_ban(self, event: MessageEvent, ctx: Context) -> None:
+                    await event.reply(f"banned:{event.text}")
 
-    @on_command("hello")
-    async def hello(self, event: MessageEvent, ctx: Context) -> None:
-        await event.reply("hello")
-""",
-        encoding="utf-8",
+                @on_command("hello")
+                async def hello(self, event: MessageEvent, ctx: Context) -> None:
+                    await event.reply("hello")
+        """),
     )
 
     async with PluginHarness.from_plugin_dir(plugin_dir) as harness:
         # 完整路径 "admin ban" 能匹配
         records = await harness.dispatch_text("admin ban user123")
         assert len(records) == 1
-        assert records[0].text == "banned:user123"
+        # event.text 包含完整消息文本，含 group 前缀
+        assert records[0].text == "banned:admin ban user123"
 
         # 别名展开 "admin block" 也能匹配
         alias_records = await harness.dispatch_text("admin block user456")
         assert len(alias_records) == 1
-        assert alias_records[0].text == "banned:user456"
+        assert alias_records[0].text == "banned:admin block user456"
 
         # 不带前缀的 "ban" 不应匹配到 group 命令
-        from astrbot_sdk.errors import AstrBotError
-
         with pytest.raises(AstrBotError):
             await harness.dispatch_text("ban user789")
 
@@ -301,28 +330,23 @@ class GroupPlugin(Star):
 @pytest.mark.asyncio
 async def test_on_command_multi_level_group_dispatch(tmp_path):
     """多级 group 路径正确分发。"""
-    from pathlib import Path
-
     from astrbot_sdk.testing import PluginHarness
 
     plugin_dir = tmp_path / "multi_group_plugin"
-    plugin_dir.mkdir(parents=True, exist_ok=True)
-    (plugin_dir / "plugin.yaml").write_text(
-        "_schema_version: 2\nname: multi_group_plugin\nauthor: tests\nversion: 1.0.0\n",
-        encoding="utf-8",
-    )
-    (plugin_dir / "main.py").write_text(
-        """
-from astrbot_sdk import Context, MessageEvent, Star
-from astrbot_sdk.decorators import on_command
+    _write_plugin(
+        plugin_dir,
+        name="multi_group_plugin",
+        class_name="MultiGroupPlugin",
+        source=dedent("""
+            from astrbot_sdk import Context, MessageEvent, Star
+            from astrbot_sdk.decorators import on_command
 
 
-class MultiGroupPlugin(Star):
-    @on_command("ban", group=["admin", "user"], description="封禁用户")
-    async def admin_user_ban(self, event: MessageEvent, ctx: Context) -> None:
-        await event.reply("admin-user-ban")
-""",
-        encoding="utf-8",
+            class MultiGroupPlugin(Star):
+                @on_command("ban", group=["admin", "user"], description="封禁用户")
+                async def admin_user_ban(self, event: MessageEvent, ctx: Context) -> None:
+                    await event.reply("admin-user-ban")
+        """),
     )
 
     async with PluginHarness.from_plugin_dir(plugin_dir) as harness:
