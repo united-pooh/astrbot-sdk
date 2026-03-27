@@ -9,6 +9,7 @@
 6. conversation_command 的 group/group_help 透传到 on_command
 7. 带实际插件运行时的 dispatch 行为
 """
+
 from __future__ import annotations
 
 from pathlib import Path

@@ -508,9 +508,11 @@ def on_command(
         for item in dict.fromkeys([*commands[1:], *(aliases or [])])
         if isinstance(item, str) and item and item != canonical
     ]
-    expanded_aliases: list[str] = [
-        " ".join([*group_path, alias]) for alias in merged_aliases
-    ] if group_path else merged_aliases
+    expanded_aliases: list[str] = (
+        [" ".join([*group_path, alias]) for alias in merged_aliases]
+        if group_path
+        else merged_aliases
+    )
 
     def decorator(func: HandlerCallable) -> HandlerCallable:
         meta = _get_or_create_meta(func)
