@@ -1,7 +1,6 @@
 # AstrBot SDK 架构概述文档
 
 > 作者：whatevertogo
-> 生成日期：2026-03-19
 > 最后更新：2026-03-27
 
 ---
@@ -207,30 +206,31 @@ Worker (Plugin)                 Supervisor (Core)
 
 ```
                     ┌──────────────┐
-                    │  AstrBot   │
-                    │    Core    │
-                    └──────┬─────┘
+                    │  AstrBot     │
+                    │    Core      │
+                    └──────┬───────┘
                            │
-                    ┌──────▼─────┐
-                    │ Supervisor  │
-                    │  Runtime   │
-                    └──────┬─────┘
+                    ┌──────▼───────┐
+                    │ Supervisor   │
+                    │  Runtime     │
+                    └──────┬───────┘
                            │
         ┌──────────────────┼──────────────────┐
         │                  │                  │
-  ┌─────▼─────┐    ┌─────▼─────┐   ┌─────▼─────┐
-  │   Peer     │    │   Peer     │   │   Peer     │
-  │  (stdio)   │    │  (stdio)   │   │  (stdio)   │
-  └─────┬─────┘    └─────┬─────┘   └─────┬─────┘
-        │                  │                  │
-  ┌─────▼─────┐    ┌─────▼─────┐   ┌─────▼─────┐
-  │  Worker    │    │  Worker    │   │  Worker    │
-  │  Runtime   │    │  Runtime   │   │  Runtime   │
-  └─────┬─────┘    └─────┬─────┘   └─────┬─────┘
-        │                  │                  │
-  ┌─────▼─────┐    ┌─────▼─────┐   ┌─────▼─────┐
-  │  Plugin A  │    │  Plugin B  │   │  Plugin C  │
-  └───────────┘    └───────────┘   └───────────┘
+  ┌─────▼─────┐    ┌──────▼────┐   ┌────────▼───┐
+  │   Peer     │                   │   Peer    │              │   Peer      │
+  │  (stdio)   │                   │  (stdio)  │              │  (ws)       │
+  └─────┬─────┘    └─────┬─────┘   └─────┬──────┘
+        │                  │                │
+  ┌─────▼─────┐    ┌──────▼────┐   ┌──────▼─────┐
+  │  Worker    │                   │  Worker   │            │  Worker     │
+  │  Runtime   │                   │  Runtime  │            │  Runtime    │
+  └─────┬─────┘    └─────┬─────┘   └─────┬──────┘
+        │                  │                │
+  ┌─────▼─────┐    ┌──────▼────┐   ┌──────▼─────┐
+  │  Plugin A  │                     │ Plugin B  │             │ Plugin C+D  │
+  │            │                     │           │             │ (Group)     │
+  └───────────┘    └───────────┘   └─────────────┘
 ```
 
 ### 核心运行时组件
@@ -386,33 +386,33 @@ SDK 文档按学习路径组织，位于项目根目录的 `docs/` 文件夹：
 
 ### 关键文件速查
 
+> 所有源码位于 `src/astrbot_sdk/`，下表使用相对于该目录的路径。
+
 | 文件 | 核心类/函数 | 说明 |
 |------|------------|------|
-| `astrbot_sdk/__init__.py` | `Star`, `Context`, `MessageEvent` | 顶层入口 |
-| `astrbot_sdk/star.py` | `Star` | v4 原生插件基类 |
-| `astrbot_sdk/context.py` | `Context` | 运行时上下文 |
-| `astrbot_sdk/decorators.py` | 所有装饰器 | v4 装饰器定义 |
-| `astrbot_sdk/filters.py` | `PlatformFilter`, `MessageTypeFilter` | 过滤器定义 |
-| `astrbot_sdk/errors.py` | `AstrBotError` | 统一错误模型 |
-| `astrbot_sdk/events.py` | `MessageEvent` | 事件模型 |
-| `astrbot_sdk/message/components.py` | `Plain`, `Image`, `At` | 消息组件 |
-| `astrbot_sdk/message_components.py` | 兼容性导出 | 向后兼容（建议使用 message/components.py）|
-| `astrbot_sdk/runtime/peer.py` | `Peer` | 协议对等端 |
-| `astrbot_sdk/runtime/transport.py` | `Transport`, `StdioTransport` | 传输层抽象 |
-| `astrbot_sdk/runtime/capability_router.py` | `CapabilityRouter` | Capability 路由 |
-| `astrbot_sdk/runtime/handler_dispatcher.py` | `HandlerDispatcher` | Handler 分发 |
-| `astrbot_sdk/runtime/supervisor.py` | `SupervisorRuntime`, `WorkerSession` | Supervisor 运行时 |
-| `astrbot_sdk/runtime/worker.py` | `PluginWorkerRuntime`, `GroupWorkerRuntime` | Worker 运行时 |
-| `astrbot_sdk/clients/llm.py` | `LLMClient` | LLM 客户端 |
+| `__init__.py` | `Star`, `Context`, `MessageEvent` | 顶层入口 |
+| `star.py` | `Star` | v4 原生插件基类 |
+| `context.py` | `Context` | 运行时上下文 |
+| `decorators.py` | 所有装饰器 | v4 装饰器定义 |
+| `filters.py` | `PlatformFilter`, `MessageTypeFilter` | 过滤器定义 |
+| `errors.py` | `AstrBotError` | 统一错误模型 |
+| `events.py` | `MessageEvent` | 事件模型 |
+| `message/components.py` | `Plain`, `Image`, `At` | 消息组件 |
+| `message_components.py` | 兼容性导出 | 向后兼容（建议使用 message/components.py）|
+| `runtime/peer.py` | `Peer` | 协议对等端 |
+| `runtime/transport.py` | `Transport`, `StdioTransport` | 传输层抽象 |
+| `runtime/capability_router.py` | `CapabilityRouter` | Capability 路由 |
+| `runtime/handler_dispatcher.py` | `HandlerDispatcher` | Handler 分发 |
+| `runtime/supervisor.py` | `SupervisorRuntime`, `WorkerSession` | Supervisor 运行时 |
+| `runtime/worker.py` | `PluginWorkerRuntime`, `GroupWorkerRuntime` | Worker 运行时 |
+| `clients/llm.py` | `LLMClient` | LLM 客户端 |
 
 ### 版本信息
 
 - **SDK 架构版本**: v4
 - **协议版本**: 1.0
 - **Python 要求**: >=3.12
-- **推荐版本**: 3.12+
 
 ---
 
-> 本文档基于 AstrBot SDK v4 架构文档整理
-> 详细内容请查阅项目根目录 `docs/` 目录下的完整文档
+> 本文档描述 AstrBot SDK v4 的架构设计，完整 API 请查阅 `docs/` 目录及 `src/astrbot_sdk/` 源码。
