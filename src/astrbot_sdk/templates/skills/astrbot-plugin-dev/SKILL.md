@@ -93,6 +93,12 @@ from astrbot_sdk.decorators import validate_config
 
 **Never use in plugin code:** `astrbot_sdk.runtime.*`, Worker/Supervisor, Loader, Peer/Transport internals.
 
+### Dependency version constraints
+
+- Unless there is a strong reason not to, declare direct plugin dependencies with the verified minimum compatible version, for example `package>=1.2.3`, instead of exact pins like `package==1.2.3`.
+- If a known incompatible major version or bad release exists, add an upper bound or exclusion too, for example `package>=1.2.3,<3.0.0` or `package>=1.2.3,!=2.4.1`.
+- Exact `==` pins are for the rare cases where the plugin truly requires one build and the reason is documented in code or release notes.
+
 ## Step 4 — Validate and test
 
 ```bash
