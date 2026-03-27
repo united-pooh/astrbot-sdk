@@ -38,6 +38,21 @@ astrbot_plugin_my_plugin/
     └── test_plugin.py       # Tests (recommended)
 ```
 
+## requirements.txt guidance
+
+Prefer direct dependencies with verified minimum compatible versions so environment grouping can reuse compatible plugin sets:
+
+```txt
+httpx>=0.27.0
+pydantic>=2.7.0,<3.0.0
+some-sdk>=1.4.2,!=1.6.0
+```
+
+Notes:
+- Unless there is a strong reason not to, use minimum-version constraints (`>=`) instead of exact `==` pins for direct dependencies.
+- If a known incompatible major version or problem release exists, add an upper bound (`<`) or exclusion (`!=`) at the same time.
+- Use exact `==` only when the plugin truly depends on one specific build and you can justify that choice.
+
 ## CLI Commands
 
 All commands support two entrypoints. If `astrbot-sdk` is not on PATH, use `python -m astrbot_sdk`:
