@@ -7,7 +7,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from ..errors import AstrBotError, ErrorCodes
+from ..errors import AstrBotError
 from ..message.components import (
     BaseMessageComponent,
     component_to_payload_sync,
@@ -403,18 +403,17 @@ class PersonaManagerClient:
         self._proxy = proxy
 
     async def get_persona(self, persona_id: str) -> PersonaRecord:
-        try:
-            output = await self._proxy.call(
-                "persona.get",
-                {"persona_id": str(persona_id)},
-            )
-        except AstrBotError as exc:
-            if exc.code == ErrorCodes.INVALID_INPUT:
-                raise ValueError(f"persona not found: {persona_id}") from exc
-            raise
+        # 让远端 AstrBotError 自然传播，不再包装为 ValueError
+        output = await self._proxy.call(
+            "persona.get",
+            {"persona_id": str(persona_id)},
+        )
         persona = PersonaRecord.from_payload(output.get("persona"))
         if persona is None:
-            raise ValueError(f"persona not found: {persona_id}")
+            # 远端成功返回但未包含预期数据，属于协议异常
+            raise AstrBotError.protocol_error(
+                f"persona.get returned no persona for id: {persona_id}"
+            )
         return persona
 
     async def get_all_personas(self) -> list[PersonaRecord]:
@@ -438,7 +437,7 @@ class PersonaManagerClient:
         )
         persona = PersonaRecord.from_payload(output.get("persona"))
         if persona is None:
-            raise ValueError("persona.create returned no persona")
+            raise AstrBotError.protocol_error("persona.create returned no persona")
         return persona
 
     async def update_persona(
@@ -620,7 +619,7 @@ class MessageHistoryManagerClient:
         )
         page = MessageHistoryPage.from_payload(output.get("page"))
         if page is None:
-            raise ValueError("message_history.list returned no page")
+            raise AstrBotError.protocol_error("message_history.list returned no page")
         return page
 
     async def get(
@@ -675,7 +674,7 @@ class MessageHistoryManagerClient:
         )
         record = MessageHistoryRecord.from_payload(output.get("record"))
         if record is None:
-            raise ValueError("message_history.append returned no record")
+            raise AstrBotError.protocol_error("message_history.append returned no record")
         return record
 
     async def delete_before(
@@ -747,7 +746,7 @@ class KnowledgeBaseManagerClient:
         output = await self._proxy.call("kb.create", {"kb": params.to_payload()})
         kb = KnowledgeBaseRecord.from_payload(output.get("kb"))
         if kb is None:
-            raise ValueError("kb.create returned no knowledge base")
+            raise AstrBotError.protocol_error("kb.create returned no knowledge base")
         return kb
 
     async def update_kb(
@@ -800,7 +799,7 @@ class KnowledgeBaseManagerClient:
         )
         document = KnowledgeBaseDocumentRecord.from_payload(output.get("document"))
         if document is None:
-            raise ValueError("kb.document.upload returned no document")
+            raise AstrBotError.protocol_error("kb.document.upload returned no document")
         return document
 
     async def list_documents(

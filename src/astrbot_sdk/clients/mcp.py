@@ -96,7 +96,7 @@ class MCPSession(AbstractAsyncContextManager["MCPSession"]):
         )
         session_id = str(output.get("session_id", "")).strip()
         if not session_id:
-            raise ValueError("mcp.session.open returned no session_id")
+            raise AstrBotError.protocol_error("mcp.session.open returned no session_id")
         self._session_id = session_id
         tools = output.get("tools")
         self._tools = (
@@ -138,7 +138,7 @@ class MCPSession(AbstractAsyncContextManager["MCPSession"]):
         )
         result = output.get("result")
         if not isinstance(result, dict):
-            raise ValueError("mcp.session.call_tool returned no result object")
+            raise AstrBotError.protocol_error("mcp.session.call_tool returned no result object")
         return dict(result)
 
     async def list_tools(self) -> list[str]:
@@ -187,14 +187,14 @@ class MCPManagerClient:
         output = await self._proxy.call("mcp.local.enable", {"name": str(name)})
         record = MCPServerRecord.from_payload(output.get("server"))
         if record is None:
-            raise ValueError("mcp.local.enable returned no server")
+            raise AstrBotError.protocol_error("mcp.local.enable returned no server")
         return record
 
     async def disable_server(self, name: str) -> MCPServerRecord:
         output = await self._proxy.call("mcp.local.disable", {"name": str(name)})
         record = MCPServerRecord.from_payload(output.get("server"))
         if record is None:
-            raise ValueError("mcp.local.disable returned no server")
+            raise AstrBotError.protocol_error("mcp.local.disable returned no server")
         return record
 
     async def wait_until_ready(
@@ -209,7 +209,7 @@ class MCPManagerClient:
         )
         record = MCPServerRecord.from_payload(output.get("server"))
         if record is None:
-            raise ValueError("mcp.local.wait_until_ready returned no server")
+            raise AstrBotError.protocol_error("mcp.local.wait_until_ready returned no server")
         return record
 
     def session(
@@ -243,7 +243,7 @@ class MCPManagerClient:
         )
         record = MCPServerRecord.from_payload(output.get("server"))
         if record is None:
-            raise ValueError("mcp.global.register returned no server")
+            raise AstrBotError.protocol_error("mcp.global.register returned no server")
         return record
 
     async def get_global_server(self, name: str) -> MCPServerRecord | None:
@@ -276,21 +276,21 @@ class MCPManagerClient:
         )
         record = MCPServerRecord.from_payload(output.get("server"))
         if record is None:
-            raise ValueError("mcp.global.enable returned no server")
+            raise AstrBotError.protocol_error("mcp.global.enable returned no server")
         return record
 
     async def disable_global_server(self, name: str) -> MCPServerRecord:
         output = await self._proxy.call("mcp.global.disable", {"name": str(name)})
         record = MCPServerRecord.from_payload(output.get("server"))
         if record is None:
-            raise ValueError("mcp.global.disable returned no server")
+            raise AstrBotError.protocol_error("mcp.global.disable returned no server")
         return record
 
     async def unregister_global_server(self, name: str) -> MCPServerRecord:
         output = await self._proxy.call("mcp.global.unregister", {"name": str(name)})
         record = MCPServerRecord.from_payload(output.get("server"))
         if record is None:
-            raise ValueError("mcp.global.unregister returned no server")
+            raise AstrBotError.protocol_error("mcp.global.unregister returned no server")
         return record
 
 
