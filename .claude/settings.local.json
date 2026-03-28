@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \"import importlib.resources as r; p = r.files\\(''astrbot_sdk''\\).joinpath\\(''templates'', ''skills'', ''astrbot-plugin-dev''\\); print\\(''exists:'', p.is_dir\\(\\)\\)\")"
+    ]
+  }
+}

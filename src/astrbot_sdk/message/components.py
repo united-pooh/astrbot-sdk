@@ -265,8 +265,7 @@ class Image(BaseMessageComponent):
     async def convert_to_file_path(self) -> str:
         url = self.url or self.file
         if not url:
-            # Image 构造时必须提供有效文件源，此处为运行时校验
-            raise AstrBotError.invalid_input("No valid file or URL provided")
+            raise ValueError("No valid file or URL provided")
         if url.startswith("file:///"):
             return os.path.abspath(url[8:])
         if url.startswith(("http://", "https://")):
@@ -277,7 +276,7 @@ class Image(BaseMessageComponent):
             return str(file_path.resolve())
         if os.path.exists(url):
             return os.path.abspath(url)
-        raise AstrBotError.invalid_input(f"Not a valid file: {url}")
+        raise ValueError(f"not a valid file: {url}")
 
     async def register_to_file_service(self) -> str:
         return await _register_file_to_service(await self.convert_to_file_path())
@@ -315,7 +314,7 @@ class Record(BaseMessageComponent):
             return str(file_path.resolve())
         if os.path.exists(self.file):
             return os.path.abspath(self.file)
-        raise AstrBotError.invalid_input(f"Not a valid file: {self.file}")
+        raise ValueError(f"not a valid file: {self.file}")
 
     async def register_to_file_service(self) -> str:
         return await _register_file_to_service(await self.convert_to_file_path())
@@ -345,7 +344,7 @@ class Video(BaseMessageComponent):
             return await _download_to_temp_async(self.file, "videoseg")
         if os.path.exists(self.file):
             return os.path.abspath(self.file)
-        raise AstrBotError.invalid_input(f"Not a valid file: {self.file}")
+        raise ValueError(f"not a valid file: {self.file}")
 
     async def register_to_file_service(self) -> str:
         return await _register_file_to_service(await self.convert_to_file_path())
