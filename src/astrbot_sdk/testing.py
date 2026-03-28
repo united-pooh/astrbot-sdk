@@ -358,15 +358,18 @@ class PluginHarness:
             return self.platform_sink.records[start_index:]
 
         matches = self._match_handlers(event_payload)
+        help_text = self._build_group_root_help(event_payload)
+        if help_text is not None and not any(
+            isinstance(loaded.descriptor.trigger, CommandTrigger)
+            for loaded, _args in matches
+        ):
+            assert self.lifecycle_context is not None
+            await self.lifecycle_context.platform.send(
+                str(event_payload.get("session_id", "")),
+                help_text,
+            )
+            return self.platform_sink.records[start_index:]
         if not matches:
-            help_text = self._build_group_root_help(event_payload)
-            if help_text is not None:
-                assert self.lifecycle_context is not None
-                await self.lifecycle_context.platform.send(
-                    str(event_payload.get("session_id", "")),
-                    help_text,
-                )
-                return self.platform_sink.records[start_index:]
             raise AstrBotError.invalid_input("未找到匹配的 handler")
         for loaded, args in matches:
             result = await self._invoke_handler(
@@ -682,9 +685,11 @@ class PluginHarness:
             if not display_command or display_command in seen_commands:
                 continue
             seen_commands.add(display_command)
-            description = str(descriptor.description or "").strip() or str(
-                trigger.description or ""
-            ).strip() or None
+            description = (
+                str(descriptor.description or "").strip()
+                or str(trigger.description or "").strip()
+                or None
+            )
             entries.append((display_command, description))
         if not entries:
             return None
