@@ -373,68 +373,62 @@ class MessageEvent:
 
     @property
     def unified_msg_origin(self) -> str:
-        """统一消息来源标识，等价于 session_id。"""
+        """Unified message origin string."""
         return self.session_id
 
     def is_private_chat(self) -> bool:
-        """判断是否为私聊事件。优先根据 message_type 判断，否则按 group_id 是否存在推断。"""
+        """Whether the current event belongs to a private chat."""
         if self.message_type:
             return self.message_type == "private"
         return not bool(self.group_id)
 
     def is_group_chat(self) -> bool:
-        """判断是否为群聊事件。推断逻辑与 is_private_chat 对称。"""
         if self.message_type:
             return self.message_type == "group"
         return bool(self.group_id)
 
     def get_platform_id(self) -> str:
-        """返回平台实例标识（如 "qq_official"）。"""
+        """Get the platform instance identifier."""
         return self.platform_id
 
     def get_message_type(self) -> str:
-        """返回归一化后的消息类型（"private" 或 "group"）。"""
+        """Get the normalized message type."""
         return self.message_type
 
     def get_session_id(self) -> str:
-        """返回当前会话 ID（群聊为 group_id，私聊为 user_id）。"""
+        """Get the current session identifier."""
         return self.session_id
 
     def is_admin(self) -> bool:
-        """判断发送者是否拥有管理员权限。"""
+        """Whether the sender has admin permission."""
         return self._is_admin
 
     def get_messages(self) -> list[BaseMessageComponent]:
-        """返回当前事件的所有消息组件（入站消息）。"""
+        """Return SDK message components for the current event."""
         return list(self._messages)
 
     def get_sent_messages(self) -> list[BaseMessageComponent]:
-        """返回出站消息组件列表，仅对 after-send 事件有意义。"""
+        """Return outbound SDK message components for after-send events."""
         return list(self._sent_messages)
 
     def has_component(self, type_: type[BaseMessageComponent]) -> bool:
-        """判断消息中是否包含指定类型的组件。"""
         return any(isinstance(component, type_) for component in self._messages)
 
     def get_components(
         self,
         type_: type[_MessageComponentT],
     ) -> list[_MessageComponentT]:
-        """筛选并返回消息中所有指定类型的组件。"""
         return [
             component for component in self._messages if isinstance(component, type_)
         ]
 
     def get_images(self) -> list[Image]:
-        """返回消息中所有图片组件。"""
         return self.get_components(Image)
 
     def get_files(self) -> list[File]:
-        """返回消息中所有文件组件。"""
         return self.get_components(File)
 
     def extract_plain_text(self) -> str:
-        """从消息组件中提取所有纯文本内容，用空格拼接。"""
         return " ".join(
             component.text
             for component in self._messages
@@ -442,7 +436,6 @@ class MessageEvent:
         )
 
     def get_at_users(self) -> list[str]:
-        """返回消息中 @ 的用户 ID 列表，排除 @全体。"""
         return [
             str(component.qq)
             for component in self._messages
@@ -450,15 +443,15 @@ class MessageEvent:
         ]
 
     def get_message_outline(self) -> str:
-        """返回消息摘要文本，供日志/展示用。"""
+        """Return the normalized message outline."""
         return self._message_outline
 
     def get_sent_message_outline(self) -> str:
-        """返回出站消息摘要文本，仅对 after-send 事件有意义。"""
+        """Return the outbound message outline for after-send events."""
         return self._sent_message_outline
 
     async def get_group(self) -> dict[str, Any] | None:
-        """通过宿主桥接获取当前群组的元数据，非群聊或平台不支持时返回 None。"""
+        """Get current-group metadata for the bound message request."""
         context = self._require_runtime_context("get_group")
         output = await context._proxy.call(  # noqa: SLF001
             "platform.get_group",
@@ -477,27 +470,35 @@ class MessageEvent:
         return dict(payload)
 
     def set_extra(self, key: str, value: Any) -> None:
-        """存储 SDK 本地的事件临时数据。
+        """Store SDK-local transient event data.
 
-        写入后可通过 ``get_extra()`` 立即读取。若需跨 SDK 桥接传递到
-        后续 handler 或生命周期事件，值必须是 JSON 可序列化的。
+        Values written here are immediately available through ``get_extra()``
+        inside the current handler invocation. If you expect the value to remain
+        available after the event crosses the SDK bridge into a later handler or
+        lifecycle event, store only JSON-serializable data.
 
-        推荐用法:
-        - 仅使用 ``dict`` / ``list`` / ``str`` / ``int`` / ``float`` /
-          ``bool`` / ``None`` 及其嵌套组合。
-        - 存储框架对象前先转为 payload（用 ``component_to_payload_sync()``），
-          读取后用 ``payload_to_component()`` 还原。
+        Recommended approach:
+        - Keep values to ``dict`` / ``list`` / ``str`` / ``int`` / ``float`` /
+          ``bool`` / ``None`` and nested combinations of those types.
+        - Convert framework objects into payloads before storing them. For
+          message components, use ``component_to_payload_sync()`` before
+          ``set_extra()`` and ``payload_to_component()`` after ``get_extra()``.
 
-        非序列化值在当前 handler 内可读，但桥接传输时会被丢弃。
+        Non-serializable values may still be readable in the current handler,
+        but they will be dropped when the SDK bridge serializes extras for a
+        later event.
         """
         self._sdk_local_extras[key] = value
         self._sdk_local_extras_dirty = True
 
     def get_extra(self, key: str | None = None, default: Any = None) -> Any:
-        """读取事件临时数据，合并宿主侧和 SDK 本地的 extras。
+        """Read SDK-local transient event data.
 
-        若 key 为 None 则返回完整的合并字典。
-        非序列化值在桥接传输后可能丢失，此时应改用 JSON 安全的 payload。
+        Extras returned here merge host-provided extras with values previously
+        written via ``set_extra()``. If a key was written with a
+        non-serializable value, it may disappear after the event is serialized
+        across the SDK bridge. In that case, persist a JSON-safe payload
+        instead of the original object.
         """
         extras = dict(self._host_extras)
         extras.update(self._sdk_local_extras)
@@ -506,7 +507,7 @@ class MessageEvent:
         return extras.get(key, default)
 
     def clear_extra(self) -> None:
-        """清空 SDK 本地的所有临时数据。"""
+        """Clear SDK-local transient event data."""
         self._sdk_local_extras.clear()
         self._sdk_local_extras_dirty = True
 
@@ -521,7 +522,7 @@ class MessageEvent:
         )
 
     async def request_llm(self) -> bool:
-        """请求宿主为当前事件触发默认 LLM 调用链，返回是否成功。"""
+        """Request the default LLM chain for the current message request."""
         context = self._require_runtime_context("request_llm")
         output = await context._proxy.call(  # noqa: SLF001
             "system.event.llm.request",
@@ -536,7 +537,7 @@ class MessageEvent:
         return bool(output.get("should_call_llm", False))
 
     async def should_call_llm(self) -> bool:
-        """查询宿主当前是否已决定调用默认 LLM。"""
+        """Read the current default-LLM decision from the host bridge."""
         context = self._require_runtime_context("should_call_llm")
         output = await context._proxy.call(  # noqa: SLF001
             "system.event.llm.get_state",
@@ -551,7 +552,7 @@ class MessageEvent:
         return bool(output.get("should_call_llm", False))
 
     async def set_result(self, result: MessageEventResult) -> MessageEventResult:
-        """将 SDK 结果存入宿主桥接，供后续处理阶段读取。"""
+        """Store a request-scoped SDK result in the host bridge."""
         context = self._require_runtime_context("set_result")
         await context._proxy.call(  # noqa: SLF001
             "system.event.result.set",
@@ -567,7 +568,7 @@ class MessageEvent:
         return result
 
     async def get_result(self) -> MessageEventResult | None:
-        """从宿主桥接读取当前请求的 SDK 结果，不存在时返回 None。"""
+        """Read the current request-scoped SDK result from the host bridge."""
         context = self._require_runtime_context("get_result")
         output = await context._proxy.call(  # noqa: SLF001
             "system.event.result.get",
@@ -585,7 +586,7 @@ class MessageEvent:
         return MessageEventResult.from_payload(payload)
 
     async def clear_result(self) -> None:
-        """清除当前请求的 SDK 结果。"""
+        """Clear the current request-scoped SDK result."""
         context = self._require_runtime_context("clear_result")
         await context._proxy.call(  # noqa: SLF001
             "system.event.result.clear",
@@ -599,15 +600,15 @@ class MessageEvent:
         )
 
     def stop_event(self) -> None:
-        """标记事件为已停止，阻止后续 handler 处理该事件。"""
+        """Mark the SDK-local event as stopped."""
         self._stopped = True
 
     def continue_event(self) -> None:
-        """清除停止标记，允许后续 handler 继续处理。"""
+        """Clear the SDK-local stop flag."""
         self._stopped = False
 
     def is_stopped(self) -> bool:
-        """查询事件是否已被标记为停止。"""
+        """Return whether the SDK-local event is stopped."""
         return self._stopped
 
     async def reply(self, text: str) -> None:
@@ -651,7 +652,7 @@ class MessageEvent:
         await context.platform.send_chain(self._reply_target(), chain)
 
     async def react(self, emoji: str) -> bool:
-        """发送 emoji 表态，平台不支持时返回 False。"""
+        """Send a platform reaction when supported."""
         context = self._require_runtime_context("react")
         output = await context._proxy.call(  # noqa: SLF001
             "system.event.react",
@@ -667,7 +668,7 @@ class MessageEvent:
         return bool(output.get("supported", False))
 
     async def send_typing(self) -> bool:
-        """发送"正在输入"状态，平台不支持时返回 False。"""
+        """Emit typing state when the host platform supports it."""
         context = self._require_runtime_context("send_typing")
         output = await context._proxy.call(  # noqa: SLF001
             "system.event.send_typing",
@@ -686,11 +687,7 @@ class MessageEvent:
         generator,
         use_fallback: bool = False,
     ) -> bool:
-        """流式输出：将 generator 产出的文本/组件逐块推送到宿主流式通道。
-
-        generator 可产出 str、MessageChain、MessageEventResult 或单个组件。
-        平台不支持流式输出时返回 False。
-        """
+        """Replay normalized chunks through the host streaming pathway."""
         context = self._require_runtime_context("send_streaming")
         output = await context._proxy.call(  # noqa: SLF001
             "system.event.send_streaming",
@@ -750,11 +747,11 @@ class MessageEvent:
         return PlainTextResult(text=text)
 
     def make_result(self) -> MessageEventResult:
-        """创建一个空的 SDK 事件结果包装器。"""
+        """Create an empty SDK-local result wrapper."""
         return MessageEventResult(type=EventResultType.EMPTY)
 
     def image_result(self, url_or_path: str) -> MessageEventResult:
-        """创建包含一张图片的消息链结果。支持 URL、base64 和本地路径。"""
+        """Create a chain result that contains one image component."""
         if url_or_path.startswith(("http://", "https://")):
             image = Image.fromURL(url_or_path)
         elif url_or_path.startswith("base64://"):
