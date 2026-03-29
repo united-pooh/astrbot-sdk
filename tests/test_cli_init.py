@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import zipfile
 from pathlib import Path
+from textwrap import dedent
 
 from click.testing import CliRunner
 
@@ -51,6 +52,64 @@ def test_init_interactive_prompts_and_sanitizes_name() -> None:
         assert "author: Alice" in manifest
         assert "desc: Example plugin" in manifest
         assert "version: 1.0.0" in manifest
+
+
+def test_init_generates_plugin_gitignore() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        result = runner.invoke(cli, ["init", "demo-plugin"])
+
+        assert result.exit_code == 0
+        plugin_dir = Path("astrbot_plugin_demo_plugin")
+        gitignore = (plugin_dir / ".gitignore").read_text(encoding="utf-8")
+        assert gitignore == dedent(
+            """\
+            # Python
+            __pycache__/
+            *.py[cod]
+            *.pyo
+            *.egg-info/
+            dist/
+            build/
+            *.egg
+
+            # 虚拟环境
+            .venv/
+            venv/
+            env/
+
+            # IDE
+            .idea/
+            .vscode/
+            *.swp
+            *.swo
+            *~
+
+            # OS
+            .DS_Store
+            Thumbs.db
+            desktop.ini
+
+            # 测试 / 检查缓存
+            .pytest_cache/
+            .ruff_cache/
+            .mypy_cache/
+            .coverage
+            htmlcov/
+
+            # 开发/构建工具
+            /.claude/
+            /.agents/
+            /.opencode/
+
+            # 图床配置（含 API 密钥等敏感信息）
+            /image_host/config.json
+
+            # 插件测试产物
+            /.astrbot_sdk_testing/
+            """
+        )
 
 
 def test_init_generates_claude_agent_directory() -> None:
