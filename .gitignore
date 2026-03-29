@@ -29,6 +29,9 @@ tmp/
 openspec/
 scripts/
 cs/
+/forward-tests/
+/skills/
+/tools/
 test_plugin/astrbot_plugin_interface_coverage
 docs/
 astrbot_sdk/
