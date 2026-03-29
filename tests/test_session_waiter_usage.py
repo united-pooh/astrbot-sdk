@@ -34,6 +34,16 @@ def _attach_waiter_manager(ctx: MockContext) -> SessionWaiterManager:
 
 
 @pytest.mark.asyncio
+async def test_session_controller_keep_requires_active_timeout_when_not_resetting() -> (
+    None
+):
+    controller = SessionController()
+
+    with pytest.raises(RuntimeError, match="requires an active timeout"):
+        controller.keep(timeout=1, reset_timeout=False)
+
+
+@pytest.mark.asyncio
 async def test_session_waiter_register_task_pattern_is_non_blocking(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

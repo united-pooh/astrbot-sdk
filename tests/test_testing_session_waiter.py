@@ -25,6 +25,7 @@ def _write_session_waiter_plugin(plugin_dir: Path) -> None:
                 "display_name: Session Waiter Plugin",
                 "desc: test plugin",
                 "author: tests",
+                "repo: astrbot/session-waiter-plugin",
                 "version: 0.1.0",
                 "runtime:",
                 '  python: "3.11"',
