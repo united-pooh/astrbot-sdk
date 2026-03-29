@@ -63,9 +63,16 @@ def test_run_command_resolves_protocol_stdout_to_stream(
 ) -> None:
     captured: dict[str, object] = {}
 
-    async def fake_run_supervisor(*, plugins_dir: Path, stdout=None, **_) -> None:
+    async def fake_run_supervisor(
+        *,
+        plugins_dir: Path,
+        stdout=None,
+        workers_manifest: Path | None = None,
+        **_,
+    ) -> None:
         captured["plugins_dir"] = plugins_dir
         captured["stdout_name"] = getattr(stdout, "name", None)
+        captured["workers_manifest"] = workers_manifest
 
     def fake_run_async_entrypoint(entrypoint, **_) -> None:
         asyncio.run(entrypoint)
@@ -76,13 +83,22 @@ def test_run_command_resolves_protocol_stdout_to_stream(
     runner = CliRunner()
     result = runner.invoke(
         cli.cli,
-        ["run", "--plugins-dir", str(tmp_path), "--protocol-stdout", "silent"],
+        [
+            "run",
+            "--plugins-dir",
+            str(tmp_path),
+            "--workers-manifest",
+            str(tmp_path / "workers.yaml"),
+            "--protocol-stdout",
+            "silent",
+        ],
     )
 
     assert result.exit_code == 0
     assert captured == {
         "plugins_dir": tmp_path,
         "stdout_name": os.devnull,
+        "workers_manifest": tmp_path / "workers.yaml",
     }
 
 
@@ -128,4 +144,80 @@ def test_worker_command_resolves_protocol_stdout_to_stream(
         "plugin_dir": plugin_dir,
         "group_metadata": None,
         "stdout_name": str(output_path),
+    }
+
+
+def test_serve_worker_command_passes_websocket_parameters(
+    monkeypatch, tmp_path: Path
+) -> None:
+    captured: dict[str, object] = {}
+    plugin_dir = tmp_path / "plugin"
+    plugin_dir.mkdir()
+    ca_file = tmp_path / "ca.pem"
+    cert_file = tmp_path / "cert.pem"
+    key_file = tmp_path / "key.pem"
+    for path in (ca_file, cert_file, key_file):
+        path.write_text("pem", encoding="utf-8")
+
+    async def fake_run_websocket_server(
+        *,
+        worker_id: str | None,
+        plugin_dirs: list[Path] | None,
+        host: str,
+        port: int,
+        path: str,
+        tls_ca_file: Path,
+        tls_cert_file: Path,
+        tls_key_file: Path,
+        **_,
+    ) -> None:
+        captured["worker_id"] = worker_id
+        captured["plugin_dirs"] = plugin_dirs
+        captured["host"] = host
+        captured["port"] = port
+        captured["path"] = path
+        captured["tls_ca_file"] = tls_ca_file
+        captured["tls_cert_file"] = tls_cert_file
+        captured["tls_key_file"] = tls_key_file
+
+    def fake_run_async_entrypoint(entrypoint, **_) -> None:
+        asyncio.run(entrypoint)
+
+    monkeypatch.setattr(cli, "run_websocket_server", fake_run_websocket_server)
+    monkeypatch.setattr(cli, "_run_async_entrypoint", fake_run_async_entrypoint)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.cli,
+        [
+            "serve-worker",
+            "--worker-id",
+            "remote-alpha",
+            "--plugin-dir",
+            str(plugin_dir),
+            "--host",
+            "0.0.0.0",
+            "--port",
+            "9000",
+            "--path",
+            "/ws",
+            "--tls-ca-file",
+            str(ca_file),
+            "--tls-cert-file",
+            str(cert_file),
+            "--tls-key-file",
+            str(key_file),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert captured == {
+        "worker_id": "remote-alpha",
+        "plugin_dirs": [plugin_dir],
+        "host": "0.0.0.0",
+        "port": 9000,
+        "path": "/ws",
+        "tls_ca_file": ca_file,
+        "tls_cert_file": cert_file,
+        "tls_key_file": key_file,
     }

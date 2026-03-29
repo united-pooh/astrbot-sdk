@@ -157,9 +157,16 @@ async def test_run_supervisor_passes_env_manager_and_restores_stdout(
         lambda *, stdin, stdout: SimpleNamespace(stdin=stdin, stdout=stdout),
     )
 
-    def fake_runtime(*, transport, plugins_dir: Path, env_manager) -> _RecordingRuntime:
+    def fake_runtime(
+        *,
+        transport,
+        plugins_dir: Path,
+        env_manager,
+        workers_manifest: Path | None = None,
+    ) -> _RecordingRuntime:
         assert plugins_dir == Path("plugins-under-test")
         assert env_manager is not None
+        assert workers_manifest is None
         assert transport.stdin == "stdin"
         assert transport.stdout == "stdout"
         runtime = _RecordingRuntime(peer_name="supervisor-peer")
@@ -195,21 +202,44 @@ async def test_run_websocket_server_uses_websocket_transport_and_default_cwd(
 ) -> None:
     created: list[_RecordingRuntime] = []
     websocket_transports: list[SimpleNamespace] = []
+    ssl_contexts: list[tuple[Path, Path, Path]] = []
 
     monkeypatch.setattr(bootstrap_module.Path, "cwd", lambda: Path("cwd-plugin"))
+    monkeypatch.setattr(
+        bootstrap_module,
+        "_load_plugin_specs",
+        lambda plugin_dirs: [SimpleNamespace(name="cwd-plugin")],
+    )
 
-    def fake_transport(*, host: str, port: int, path: str):
-        transport = SimpleNamespace(host=host, port=port, path=path)
+    def fake_ssl_context(*, ca_file: Path, cert_file: Path, key_file: Path):
+        ssl_contexts.append((ca_file, cert_file, key_file))
+        return "ssl-context"
+
+    def fake_transport(*, host: str, port: int, path: str, ssl_context):
+        transport = SimpleNamespace(
+            host=host,
+            port=port,
+            path=path,
+            ssl_context=ssl_context,
+        )
         websocket_transports.append(transport)
         return transport
 
-    def fake_runtime(*, plugin_dir: Path, transport) -> _RecordingRuntime:
-        assert plugin_dir == Path("cwd-plugin")
+    def fake_runtime(
+        *, plugin_dir: Path, worker_id: str | None, transport
+    ) -> _RecordingRuntime:
+        assert plugin_dir == Path("cwd-plugin").resolve()
+        assert worker_id == "cwd-plugin"
         assert transport is websocket_transports[0]
         runtime = _RecordingRuntime(peer_name="ws-peer")
         created.append(runtime)
         return runtime
 
+    monkeypatch.setattr(
+        bootstrap_module,
+        "build_websocket_server_ssl_context",
+        fake_ssl_context,
+    )
     monkeypatch.setattr(bootstrap_module, "WebSocketServerTransport", fake_transport)
     monkeypatch.setattr(bootstrap_module, "PluginWorkerRuntime", fake_runtime)
     monkeypatch.setattr(
@@ -227,11 +257,79 @@ async def test_run_websocket_server_uses_websocket_transport_and_default_cwd(
         host="0.0.0.0",
         port=9000,
         path="/ws",
-        plugin_dir=None,
+        plugin_dirs=None,
+        tls_ca_file=Path("ca.pem"),
+        tls_cert_file=Path("cert.pem"),
+        tls_key_file=Path("key.pem"),
     )
 
     assert websocket_transports == [
-        SimpleNamespace(host="0.0.0.0", port=9000, path="/ws")
+        SimpleNamespace(
+            host="0.0.0.0",
+            port=9000,
+            path="/ws",
+            ssl_context="ssl-context",
+        )
     ]
+    assert ssl_contexts == [(Path("ca.pem"), Path("cert.pem"), Path("key.pem"))]
+    assert created[0].started is True
+    assert created[0].stopped is True
+
+
+@pytest.mark.asyncio
+async def test_run_websocket_server_uses_group_runtime_for_multiple_plugins(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    created: list[_RecordingRuntime] = []
+
+    monkeypatch.setattr(
+        bootstrap_module,
+        "build_websocket_server_ssl_context",
+        lambda *, ca_file, cert_file, key_file: (
+            ca_file,
+            cert_file,
+            key_file,
+        ),
+    )
+    monkeypatch.setattr(
+        bootstrap_module,
+        "WebSocketServerTransport",
+        lambda **kwargs: SimpleNamespace(**kwargs),
+    )
+
+    def fake_runtime(
+        *,
+        plugin_dirs: list[Path],
+        worker_id: str,
+        transport,
+    ) -> _RecordingRuntime:
+        assert plugin_dirs == [Path("alpha").resolve(), Path("beta").resolve()]
+        assert worker_id == "remote-bundle"
+        assert transport.path == "/ws"
+        runtime = _RecordingRuntime(peer_name="group-ws-peer")
+        created.append(runtime)
+        return runtime
+
+    monkeypatch.setattr(bootstrap_module, "GroupWorkerRuntime", fake_runtime)
+    monkeypatch.setattr(
+        bootstrap_module,
+        "_install_signal_handlers",
+        lambda stop_event: stop_event.set(),
+    )
+    monkeypatch.setattr(
+        bootstrap_module,
+        "_wait_for_shutdown",
+        lambda peer, stop_event: bootstrap_module.asyncio.sleep(0),
+    )
+
+    await bootstrap_module.run_websocket_server(
+        worker_id="remote-bundle",
+        plugin_dirs=[Path("alpha"), Path("beta")],
+        path="/ws",
+        tls_ca_file=Path("ca.pem"),
+        tls_cert_file=Path("cert.pem"),
+        tls_key_file=Path("key.pem"),
+    )
+
     assert created[0].started is True
     assert created[0].stopped is True
