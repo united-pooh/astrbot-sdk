@@ -16,9 +16,12 @@ from astrbot_sdk.runtime.transport import (
 
 
 @pytest.mark.unit
-def test_frame_stdio_payload_rejects_embedded_newlines() -> None:
-    with pytest.raises(ValueError, match="原始换行符"):
-        _frame_stdio_payload("hello\nworld")
+def test_frame_stdio_payload_prefixes_utf8_byte_length() -> None:
+    payload = "hello\nworld"
+
+    framed = _frame_stdio_payload(payload)
+
+    assert framed == f"{len(payload.encode('utf-8'))}\n{payload}".encode("utf-8")
 
 
 @pytest.mark.asyncio
@@ -27,10 +30,21 @@ async def test_stdio_read_process_loop_dispatches_messages_and_sets_closed() -> 
 
     class _FakeStdout:
         def __init__(self) -> None:
-            self._items = [b"first\r\n", b"second\n", b""]
+            self._items = [
+                b"5\n",
+                b"first",
+                b"6\n",
+                b"second",
+                b"",
+            ]
 
         async def readline(self) -> bytes:
             return self._items.pop(0)
+
+        async def readexactly(self, size: int) -> bytes:
+            payload = self._items.pop(0)
+            assert len(payload) == size
+            return payload
 
     transport = StdioTransport(command=["python", "-V"])
     transport._process = SimpleNamespace(stdout=_FakeStdout())
@@ -61,12 +75,52 @@ async def test_stdio_wait_closed_unblocks_after_process_eof() -> None:
 @pytest.mark.asyncio
 async def test_stdio_read_file_loop_dispatches_messages_and_sets_closed() -> None:
     received: list[str] = []
-    transport = StdioTransport(stdin=io.StringIO("line-1\nline-2\r\n"))
+    payload = _frame_stdio_payload("line-1") + _frame_stdio_payload("line-2")
+    transport = StdioTransport(stdin=SimpleNamespace(buffer=io.BytesIO(payload)))
     transport.set_message_handler(lambda payload: _capture(received, payload))
 
     await transport._read_file_loop()
 
     assert received == ["line-1", "line-2"]
+    assert transport._closed.is_set() is True
+
+
+@pytest.mark.asyncio
+async def test_stdio_read_process_loop_stops_after_malformed_header() -> None:
+    received: list[str] = []
+
+    class _FakeStdout:
+        def __init__(self) -> None:
+            self._items = [b"oops\n", b"6\n", b"second", b""]
+
+        async def readline(self) -> bytes:
+            return self._items.pop(0)
+
+        async def readexactly(self, size: int) -> bytes:
+            payload = self._items.pop(0)
+            assert len(payload) == size
+            return payload
+
+    transport = StdioTransport(command=["python", "-V"])
+    transport._process = SimpleNamespace(stdout=_FakeStdout())
+    transport.set_message_handler(lambda payload: _capture(received, payload))
+
+    await transport._read_process_loop()
+
+    assert received == []
+    assert transport._closed.is_set() is True
+
+
+@pytest.mark.asyncio
+async def test_stdio_read_file_loop_stops_after_malformed_header() -> None:
+    received: list[str] = []
+    payload = b"oops\n" + _frame_stdio_payload("second")
+    transport = StdioTransport(stdin=SimpleNamespace(buffer=io.BytesIO(payload)))
+    transport.set_message_handler(lambda payload: _capture(received, payload))
+
+    await transport._read_file_loop()
+
+    assert received == []
     assert transport._closed.is_set() is True
 
 
