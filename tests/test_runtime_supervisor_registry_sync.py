@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -13,6 +14,7 @@ from astrbot_sdk.runtime.environment_groups import EnvironmentPlanResult
 from astrbot_sdk.runtime.loader import PluginDiscoveryResult, PluginSpec
 from astrbot_sdk.runtime.supervisor import SupervisorRuntime, WorkerSession
 from astrbot_sdk.runtime.transport import Transport
+from astrbot_sdk.runtime.workers_manifest import RemoteWorkerSpec, RemoteWorkerTLSConfig
 
 
 class _DummyTransport(Transport):
@@ -146,22 +148,45 @@ async def test_supervisor_publishes_plugin_registry_in_two_phases(
             *,
             plugin=None,
             group=None,
+            remote_worker=None,
             repo_root,
             env_manager,
             capability_router,
             on_closed=None,
         ) -> None:
-            del group, repo_root, env_manager, capability_router, on_closed
+            del (
+                group,
+                remote_worker,
+                repo_root,
+                env_manager,
+                capability_router,
+                on_closed,
+            )
             assert plugin is not None
             self.plugin = plugin
             self.plugins = [plugin]
-            self.group_id = plugin.name
+            self.worker_id = plugin.name
             self.handlers = []
             self.provided_capabilities = []
             self.loaded_plugins: list[str] = []
             self.skipped_plugins: dict[str, str] = {}
             self.issues = []
             self.capability_sources: dict[str, str] = {}
+            self.worker_registry: list[dict[str, object]] = [
+                {
+                    "name": plugin.name,
+                    "display_name": plugin.name,
+                    "description": "",
+                    "repo": "",
+                    "author": "tests",
+                    "version": "1.0.0",
+                    "enabled": True,
+                    "config": {},
+                }
+            ]
+            self.llm_tools = []
+            self.agents = []
+            self.is_remote = False
 
         async def start(self) -> None:
             phase_snapshots.append(
@@ -185,7 +210,7 @@ async def test_supervisor_publishes_plugin_registry_in_two_phases(
 
         def describe(self) -> dict[str, object]:
             return {
-                "group_id": self.group_id,
+                "worker_id": self.worker_id,
                 "plugins": [plugin.name for plugin in self.plugins],
                 "loaded_plugins": list(self.loaded_plugins),
                 "skipped_plugins": dict(self.skipped_plugins),
@@ -198,7 +223,7 @@ async def test_supervisor_publishes_plugin_registry_in_two_phases(
 
     assert phase_snapshots == [
         ("alpha", {"alpha": False, "beta": False}),
-        ("beta", {"alpha": False, "beta": False}),
+        ("beta", {"alpha": True, "beta": False}),
     ]
     assert runtime.loaded_plugins == ["alpha"]
     assert runtime.skipped_plugins["beta"] == "beta worker failed"
@@ -220,16 +245,16 @@ async def test_supervisor_publishes_plugin_registry_in_two_phases(
             }
         ],
         "aggregated_handler_ids": [],
-        "worker_groups": [
+        "workers": [
             {
-                "group_id": "alpha",
+                "worker_id": "alpha",
                 "plugins": ["alpha"],
                 "loaded_plugins": ["alpha"],
                 "skipped_plugins": {},
                 "issues": [],
             }
         ],
-        "worker_group_count": 1,
+        "worker_count": 1,
     }
 
 
@@ -333,7 +358,7 @@ async def test_worker_session_start_surfaces_init_waiter_failure(
             raise AstrBotError.protocol_error("连接在初始化完成前关闭")
 
         async def wait_closed(self) -> None:
-            return None
+            await asyncio.Event().wait()
 
         async def stop(self) -> None:
             self.stopped = True
@@ -347,3 +372,272 @@ async def test_worker_session_start_surfaces_init_waiter_failure(
     assert exc_info.value.code == ErrorCodes.PROTOCOL_ERROR
     assert len(created_peers) == 1
     assert created_peers[0].stopped is True
+
+
+@pytest.mark.asyncio
+async def test_remote_worker_session_uses_websocket_transport(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session = WorkerSession(
+        remote_worker=RemoteWorkerSpec(
+            id="remote-alpha",
+            url="wss://worker.example/ws",
+            tls=RemoteWorkerTLSConfig(
+                ca_file=tmp_path / "ca.pem",
+                cert_file=tmp_path / "cert.pem",
+                key_file=tmp_path / "key.pem",
+                server_hostname="worker.internal",
+            ),
+        ),
+        repo_root=tmp_path,
+        env_manager=_StaticEnvManager([]),
+        capability_router=CapabilityRouter(),
+    )
+
+    captured: dict[str, object] = {}
+
+    class _StubWebSocketTransport:
+        def __init__(self, *, url, ssl_context, server_hostname) -> None:
+            captured["url"] = url
+            captured["ssl_context"] = ssl_context
+            captured["server_hostname"] = server_hostname
+
+    class _Peer:
+        def __init__(self, *, transport, peer_info) -> None:
+            del peer_info
+            self.transport = transport
+            self.remote_peer = SimpleNamespace(name="remote-alpha")
+            self.remote_handlers = []
+            self.remote_provided_capabilities = []
+            self.remote_metadata = {
+                "loaded_plugins": [],
+                "worker_registry": [],
+            }
+            self.stopped = False
+
+        def set_initialize_handler(self, _handler) -> None:
+            return None
+
+        def set_invoke_handler(self, _handler) -> None:
+            return None
+
+        async def start(self) -> None:
+            return None
+
+        async def wait_until_remote_initialized(
+            self, timeout: float | None = None
+        ) -> None:
+            del timeout
+            return None
+
+        async def wait_closed(self) -> None:
+            await asyncio.Event().wait()
+
+        async def stop(self) -> None:
+            self.stopped = True
+
+    monkeypatch.setattr(
+        supervisor_module,
+        "build_websocket_client_ssl_context",
+        lambda *, ca_file, cert_file, key_file: (
+            str(ca_file),
+            str(cert_file),
+            str(key_file),
+        ),
+    )
+    monkeypatch.setattr(
+        supervisor_module,
+        "WebSocketClientTransport",
+        _StubWebSocketTransport,
+    )
+    monkeypatch.setattr(supervisor_module, "Peer", _Peer)
+
+    with pytest.raises(RuntimeError, match="did not provide worker_registry"):
+        await session.start()
+
+    assert captured == {
+        "url": "wss://worker.example/ws",
+        "ssl_context": (
+            str(tmp_path / "ca.pem"),
+            str(tmp_path / "cert.pem"),
+            str(tmp_path / "key.pem"),
+        ),
+        "server_hostname": "worker.internal",
+    }
+
+
+@pytest.mark.asyncio
+async def test_supervisor_continues_when_remote_worker_is_unreachable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runtime = SupervisorRuntime(
+        transport=_DummyTransport(),
+        plugins_dir=tmp_path,
+        env_manager=_StaticEnvManager([]),
+        workers_manifest=tmp_path / "workers.yaml",
+    )
+    peer = _RecordingPeer()
+    runtime.peer = peer  # type: ignore[assignment]
+
+    monkeypatch.setattr(
+        supervisor_module,
+        "discover_plugins",
+        lambda _plugins_dir: PluginDiscoveryResult(
+            plugins=[],
+            skipped_plugins={},
+            issues=[],
+        ),
+    )
+    monkeypatch.setattr(
+        supervisor_module,
+        "load_remote_workers_manifest",
+        lambda _path: [
+            RemoteWorkerSpec(
+                id="remote-alpha",
+                url="wss://worker.example/ws",
+                tls=RemoteWorkerTLSConfig(
+                    ca_file=tmp_path / "ca.pem",
+                    cert_file=tmp_path / "cert.pem",
+                    key_file=tmp_path / "key.pem",
+                ),
+            )
+        ],
+    )
+
+    class _FakeWorkerSession:
+        def __init__(
+            self,
+            *,
+            plugin=None,
+            group=None,
+            remote_worker=None,
+            repo_root,
+            env_manager,
+            capability_router,
+            on_closed=None,
+        ) -> None:
+            del plugin, group, repo_root, env_manager, capability_router, on_closed
+            assert remote_worker is not None
+            self.worker_id = remote_worker.id
+            self.plugins = []
+
+        async def start(self) -> None:
+            raise RuntimeError("connect failed")
+
+        async def stop(self) -> None:
+            return None
+
+    monkeypatch.setattr(supervisor_module, "WorkerSession", _FakeWorkerSession)
+
+    await runtime.start()
+
+    assert runtime.loaded_plugins == []
+    assert peer.started is True
+    assert len(peer.initialize_calls) == 1
+    assert any(
+        issue.plugin_id == "remote-alpha" and issue.message == "远程 worker 连接失败"
+        for issue in runtime.issues
+    )
+
+
+@pytest.mark.asyncio
+async def test_supervisor_rejects_remote_worker_plugin_conflict(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    alpha = _write_plugin_spec(tmp_path, "alpha")
+    runtime = SupervisorRuntime(
+        transport=_DummyTransport(),
+        plugins_dir=tmp_path,
+        env_manager=_StaticEnvManager([]),
+        workers_manifest=tmp_path / "workers.yaml",
+    )
+    runtime.peer = _RecordingPeer()  # type: ignore[assignment]
+
+    monkeypatch.setattr(
+        supervisor_module,
+        "discover_plugins",
+        lambda _plugins_dir: PluginDiscoveryResult(
+            plugins=[alpha],
+            skipped_plugins={},
+            issues=[],
+        ),
+    )
+    monkeypatch.setattr(
+        supervisor_module,
+        "load_remote_workers_manifest",
+        lambda _path: [
+            RemoteWorkerSpec(
+                id="remote-alpha",
+                url="wss://example.invalid/ws",
+                tls=RemoteWorkerTLSConfig(
+                    ca_file=tmp_path / "ca.pem",
+                    cert_file=tmp_path / "cert.pem",
+                    key_file=tmp_path / "key.pem",
+                ),
+            )
+        ],
+    )
+
+    class _FakeWorkerSession:
+        def __init__(
+            self,
+            *,
+            plugin=None,
+            group=None,
+            remote_worker=None,
+            repo_root,
+            env_manager,
+            capability_router,
+            on_closed=None,
+        ) -> None:
+            del plugin, group, repo_root, env_manager, capability_router, on_closed
+            assert remote_worker is not None
+            self.worker_id = remote_worker.id
+            self.plugins = []
+            self.handlers = []
+            self.provided_capabilities = []
+            self.loaded_plugins = ["alpha"]
+            self.skipped_plugins = {}
+            self.issues = []
+            self.capability_sources = {}
+            self.worker_registry = [
+                {
+                    "name": "alpha",
+                    "display_name": "alpha",
+                    "description": "",
+                    "repo": "",
+                    "author": "tests",
+                    "version": "1.0.0",
+                    "enabled": True,
+                    "config": {},
+                }
+            ]
+            self.llm_tools = []
+            self.agents = []
+            self.is_remote = True
+
+        async def start(self) -> None:
+            return None
+
+        async def stop(self) -> None:
+            return None
+
+        def start_close_watch(self) -> None:
+            return None
+
+        def describe(self) -> dict[str, object]:
+            return {"worker_id": self.worker_id, "plugins": ["alpha"]}
+
+    monkeypatch.setattr(supervisor_module, "WorkerSession", _FakeWorkerSession)
+
+    await runtime.start()
+
+    assert runtime.loaded_plugins == []
+    assert any(
+        issue.plugin_id == "remote-alpha"
+        and "conflicts with existing plugins" in issue.details
+        for issue in runtime.issues
+    )

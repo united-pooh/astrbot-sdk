@@ -74,6 +74,7 @@ async def test_plugin_worker_handle_cancel_fans_out_to_both_dispatchers() -> Non
 async def test_plugin_worker_start_initializes_metadata_and_handlers() -> None:
     runtime = object.__new__(PluginWorkerRuntime)
     runtime.plugin = _plugin_spec("alpha")
+    runtime.worker_id = "alpha-worker"
     runtime.loaded_plugin = LoadedPlugin(
         plugin=runtime.plugin,
         handlers=[],
@@ -119,14 +120,27 @@ async def test_plugin_worker_start_initializes_metadata_and_handlers() -> None:
 
     assert runtime.peer.started is True
     assert lifecycle_calls == ["on_start"]
-    assert runtime.peer.initialize_calls[0]["metadata"]["plugin_id"] == "alpha"
+    assert runtime.peer.initialize_calls[0]["metadata"]["worker_id"] == "alpha-worker"
     assert runtime.peer.initialize_calls[0]["metadata"]["loaded_plugins"] == ["alpha"]
+    assert runtime.peer.initialize_calls[0]["metadata"]["worker_registry"] == [
+        {
+            "name": "alpha",
+            "display_name": "alpha",
+            "description": "",
+            "repo": "",
+            "author": "",
+            "version": "0.0.0",
+            "enabled": True,
+            "config": {},
+        }
+    ]
 
 
 @pytest.mark.asyncio
 async def test_plugin_worker_start_runs_on_stop_when_initialize_fails() -> None:
     runtime = object.__new__(PluginWorkerRuntime)
     runtime.plugin = _plugin_spec("alpha")
+    runtime.worker_id = "alpha-worker"
     runtime.loaded_plugin = LoadedPlugin(
         plugin=runtime.plugin,
         handlers=[],
@@ -172,7 +186,8 @@ async def test_plugin_worker_start_runs_on_stop_when_initialize_fails() -> None:
 async def test_group_worker_start_raises_when_all_plugins_become_inactive() -> None:
     runtime = object.__new__(GroupWorkerRuntime)
     alpha = _plugin_spec("alpha")
-    runtime.group_id = "worker-group"
+    runtime.worker_id = "worker-group"
+    runtime.plugins = [alpha]
     runtime._plugin_states = [
         GroupPluginRuntimeState(
             plugin=alpha,
@@ -275,7 +290,7 @@ def test_group_worker_initialize_metadata_aggregates_runtime_state() -> None:
         instances=[object()],
     )
     runtime = object.__new__(GroupWorkerRuntime)
-    runtime.group_id = "worker-group"
+    runtime.worker_id = "worker-group"
     runtime.plugins = [alpha, beta]
     runtime.skipped_plugins = {"beta": "start failed"}
     runtime.issues = [
@@ -302,10 +317,32 @@ def test_group_worker_initialize_metadata_aggregates_runtime_state() -> None:
 
     metadata = GroupWorkerRuntime._initialize_metadata(runtime)
 
-    assert metadata["group_id"] == "worker-group"
+    assert metadata["worker_id"] == "worker-group"
     assert metadata["plugins"] == ["alpha", "beta"]
     assert metadata["loaded_plugins"] == ["alpha", "beta"]
     assert metadata["skipped_plugins"] == {"beta": "start failed"}
+    assert metadata["worker_registry"] == [
+        {
+            "name": "alpha",
+            "display_name": "alpha",
+            "description": "",
+            "repo": "",
+            "author": "",
+            "version": "0.0.0",
+            "enabled": True,
+            "config": {},
+        },
+        {
+            "name": "beta",
+            "display_name": "beta",
+            "description": "",
+            "repo": "",
+            "author": "",
+            "version": "0.0.0",
+            "enabled": True,
+            "config": {},
+        },
+    ]
     assert metadata["capability_sources"] == {"alpha.echo": "alpha"}
     assert metadata["llm_tools"] == [
         {
