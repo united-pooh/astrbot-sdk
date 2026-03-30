@@ -187,7 +187,7 @@ def _run_entrypoint(
     try:
         runner()
     except (click.Abort, KeyboardInterrupt):
-        click.echo("\n创建插件已优雅地中断。", err=True)
+        click.echo("\n已中断操作", err=True)
         raise SystemExit(130)
     except Exception as exc:
         _handle_cli_entrypoint_failure(exc, context=context)
