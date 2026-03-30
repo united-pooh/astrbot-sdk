@@ -3,18 +3,22 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
 
-from astrbot_sdk.errors import AstrBotError, ErrorCodes
-from astrbot_sdk.protocol.descriptors import CapabilityDescriptor
-from astrbot_sdk.runtime.capability_router import CapabilityRouter
-import astrbot_sdk.runtime.supervisor as supervisor_module
-from astrbot_sdk.runtime.environment_groups import EnvironmentPlanResult
-from astrbot_sdk.runtime.loader import PluginDiscoveryResult, PluginSpec
-from astrbot_sdk.runtime.supervisor import SupervisorRuntime, WorkerSession
-from astrbot_sdk.runtime.transport import Transport
-from astrbot_sdk.runtime.workers_manifest import RemoteWorkerSpec, RemoteWorkerTLSConfig
+from src.astrbot_sdk.errors import AstrBotError, ErrorCodes
+from src.astrbot_sdk.protocol.descriptors import CapabilityDescriptor
+from src.astrbot_sdk.runtime.capability_router import CapabilityRouter
+import src.astrbot_sdk.runtime.supervisor as supervisor_module
+from src.astrbot_sdk.runtime.environment_groups import EnvironmentPlanResult
+from src.astrbot_sdk.runtime.loader import PluginDiscoveryResult, PluginSpec
+from src.astrbot_sdk.runtime.supervisor import SupervisorRuntime, WorkerSession
+from src.astrbot_sdk.runtime.transport import Transport
+from src.astrbot_sdk.runtime.workers_manifest import (
+    RemoteWorkerSpec,
+    RemoteWorkerTLSConfig,
+)
 
 
 class _DummyTransport(Transport):
@@ -24,7 +28,8 @@ class _DummyTransport(Transport):
     async def stop(self) -> None:
         self._closed.set()
 
-    async def send(self, payload: str) -> None:
+    async def send(self, payload: bytes) -> None:
+        del payload
         return None
 
 
@@ -125,7 +130,7 @@ async def test_supervisor_publishes_plugin_registry_in_two_phases(
     runtime = SupervisorRuntime(
         transport=_DummyTransport(),
         plugins_dir=tmp_path,
-        env_manager=_StaticEnvManager(plugins),
+        env_manager=cast(Any, _StaticEnvManager(plugins)),
     )
     peer = _RecordingPeer()
     runtime.peer = peer  # type: ignore[assignment]
@@ -152,6 +157,7 @@ async def test_supervisor_publishes_plugin_registry_in_two_phases(
             repo_root,
             env_manager,
             capability_router,
+            wire_codec=None,
             on_closed=None,
         ) -> None:
             del (
@@ -160,6 +166,7 @@ async def test_supervisor_publishes_plugin_registry_in_two_phases(
                 repo_root,
                 env_manager,
                 capability_router,
+                wire_codec,
                 on_closed,
             )
             assert plugin is not None
@@ -272,7 +279,7 @@ def test_register_plugin_capability_rejects_cross_plugin_namespace() -> None:
                 input_schema={"type": "object"},
                 output_schema={"type": "object"},
             ),
-            SimpleNamespace(),
+            cast(Any, SimpleNamespace()),
             "alpha",
         )
 
@@ -290,7 +297,7 @@ def test_register_plugin_capability_rejects_duplicate_name_without_rename() -> N
             input_schema={"type": "object"},
             output_schema={"type": "object"},
         ),
-        SimpleNamespace(),
+        cast(Any, SimpleNamespace()),
         "alpha",
     )
 
@@ -302,7 +309,7 @@ def test_register_plugin_capability_rejects_duplicate_name_without_rename() -> N
                 input_schema={"type": "object"},
                 output_schema={"type": "object"},
             ),
-            SimpleNamespace(),
+            cast(Any, SimpleNamespace()),
             "alpha",
         )
 
@@ -316,7 +323,7 @@ async def test_worker_session_start_surfaces_init_waiter_failure(
     session = WorkerSession(
         plugin=plugin,
         repo_root=tmp_path,
-        env_manager=_StaticEnvManager([plugin]),
+        env_manager=cast(Any, _StaticEnvManager([plugin])),
         capability_router=CapabilityRouter(),
     )
     session._worker_command = lambda: (
@@ -331,11 +338,11 @@ async def test_worker_session_start_surfaces_init_waiter_failure(
             self.cwd = cwd
             self.env = env
 
-    created_peers: list[object] = []
+    created_peers: list[Any] = []
 
     class _FailingInitPeer:
-        def __init__(self, *, transport, peer_info) -> None:
-            del transport, peer_info
+        def __init__(self, *, transport, peer_info, wire_codec) -> None:
+            del transport, peer_info, wire_codec
             self.remote_handlers = []
             self.remote_provided_capabilities = []
             self.remote_metadata = {}
@@ -393,7 +400,7 @@ async def test_remote_worker_session_uses_websocket_transport(
             ),
         ),
         repo_root=tmp_path,
-        env_manager=_StaticEnvManager([]),
+        env_manager=cast(Any, _StaticEnvManager([])),
         capability_router=CapabilityRouter(),
     )
 
@@ -406,8 +413,8 @@ async def test_remote_worker_session_uses_websocket_transport(
             captured["server_hostname"] = server_hostname
 
     class _Peer:
-        def __init__(self, *, transport, peer_info) -> None:
-            del peer_info
+        def __init__(self, *, transport, peer_info, wire_codec) -> None:
+            del peer_info, wire_codec
             self.transport = transport
             self.remote_peer = SimpleNamespace(name="remote-alpha")
             self.remote_handlers = []
@@ -521,7 +528,7 @@ async def test_supervisor_continues_when_remote_worker_is_unreachable(
     runtime = SupervisorRuntime(
         transport=_DummyTransport(),
         plugins_dir=tmp_path,
-        env_manager=_StaticEnvManager([]),
+        env_manager=cast(Any, _StaticEnvManager([])),
         workers_manifest=tmp_path / "workers.yaml",
     )
     peer = _RecordingPeer()
@@ -562,9 +569,18 @@ async def test_supervisor_continues_when_remote_worker_is_unreachable(
             repo_root,
             env_manager,
             capability_router,
+            wire_codec=None,
             on_closed=None,
         ) -> None:
-            del plugin, group, repo_root, env_manager, capability_router, on_closed
+            del (
+                plugin,
+                group,
+                repo_root,
+                env_manager,
+                capability_router,
+                wire_codec,
+                on_closed,
+            )
             assert remote_worker is not None
             self.worker_id = remote_worker.id
             self.plugins = []
@@ -597,7 +613,7 @@ async def test_supervisor_rejects_remote_worker_plugin_conflict(
     runtime = SupervisorRuntime(
         transport=_DummyTransport(),
         plugins_dir=tmp_path,
-        env_manager=_StaticEnvManager([]),
+        env_manager=cast(Any, _StaticEnvManager([])),
         workers_manifest=tmp_path / "workers.yaml",
     )
     runtime.peer = _RecordingPeer()  # type: ignore[assignment]
@@ -637,9 +653,18 @@ async def test_supervisor_rejects_remote_worker_plugin_conflict(
             repo_root,
             env_manager,
             capability_router,
+            wire_codec=None,
             on_closed=None,
         ) -> None:
-            del plugin, group, repo_root, env_manager, capability_router, on_closed
+            del (
+                plugin,
+                group,
+                repo_root,
+                env_manager,
+                capability_router,
+                wire_codec,
+                on_closed,
+            )
             assert remote_worker is not None
             self.worker_id = remote_worker.id
             self.plugins = []
