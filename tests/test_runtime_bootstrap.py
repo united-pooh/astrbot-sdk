@@ -1028,6 +1028,27 @@ async def _assert_runtime_bootstrap_codec_roundtrip(wire_codec) -> None:
 
 
 @pytest.mark.asyncio
+async def test_worker_session_initialize_response_includes_wire_codec_metadata() -> (
+    None
+):
+    capability_router = supervisor_module.CapabilityRouter()
+    session = supervisor_module.WorkerSession(
+        plugin=_plugin_spec("demo-plugin"),
+        repo_root=Path("."),
+        env_manager=cast(Any, SimpleNamespace(name="env-manager")),
+        capability_router=capability_router,
+        wire_codec=JsonProtocolCodec(),
+    )
+    session.peer = cast(Any, SimpleNamespace(wire_codec_name="json"))
+
+    output = await session._handle_initialize(object())
+    peer = session.peer
+
+    assert peer is not None
+    assert output.metadata["wire_codec"] == peer.wire_codec_name
+
+
+@pytest.mark.asyncio
 async def test_runtime_default_msgpack_startup_initializes_invokes_and_streams() -> (
     None
 ):

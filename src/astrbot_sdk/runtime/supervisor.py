@@ -518,12 +518,15 @@ class WorkerSession:
         await self.peer.cancel(request_id)
 
     async def _handle_initialize(self, _message) -> InitializeOutput:
+        if self.peer is None:
+            raise RuntimeError("worker session is not running")
         return InitializeOutput(
             peer=PeerInfo(name="astrbot-supervisor", role="core", version="s5r"),
             capabilities=self.capability_router.all_descriptors(),
             metadata={
                 "worker_id": self.worker_id,
                 "plugins": [plugin.name for plugin in self.plugins],
+                "wire_codec": self.peer.wire_codec_name,
             },
         )
 
