@@ -29,7 +29,7 @@ AstrBot SDK 是一个基于 Python 3.12+ 的机器人插件开发框架，采用
 | **环境分组** | 多插件可共享同一 Python 虚拟环境，节省资源 |
 | **能力路由** | 显式声明的 Capability 系统，支持 JSON Schema 验证 |
 | **流式支持** | 原生支持流式 LLM 调用和增量结果返回 |
-| **协议优先** | 基于 v4 协议的统一通信模型，支持 Stdio/WebSocket 等多种传输方式 |
+| **协议优先** | 基于 s5r 协议的统一通信模型，支持 Stdio/WebSocket 等多种传输方式 |
 
 ### 技术栈
 
@@ -50,7 +50,7 @@ AstrBot SDK 是一个基于 Python 3.12+ 的机器人插件开发框架，采用
 ┌─────────────────────────────────────────────────────────────────┐
 │                   用户层 (Plugin Developer)                    │
 ├─────────────────────────────────────────────────────────────────┤
-│  v4 入口:  astrbot_sdk.{Star, Context, MessageEvent}           │
+│  astrbot-sdk 入口:  astrbot_sdk.{Star, Context, MessageEvent}  │
 │  消息链:   MessageChain, MessageBuilder, MessageEventResult    │
 │  消息组件: Plain, Image, At, AtAll, File, Video, Record, ...   │
 │  触发器:   on_command, on_message, on_event, on_schedule,      │
@@ -127,7 +127,7 @@ AstrBot SDK 是一个基于 Python 3.12+ 的机器人插件开发框架，采用
 
 ### 消息模型
 
-v4 协议定义了 5 种消息类型：
+s5r 协议定义了 5 种消息类型：
 
 | 消息类型 | 用途 | 关键字段 |
 |---------|------|---------|
@@ -318,7 +318,7 @@ HandlerDispatcher 支持参数注入，优先级为：
 
 ### 1. 协议优先模式
 
-- 所有跨进程通信都通过 v4 协议
+- 所有跨进程通信都通过 s5r 协议
 - 传输层只处理字符串，协议由 Peer 层处理
 - 支持多种传输方式（Stdio, WebSocket）
 
@@ -391,9 +391,9 @@ SDK 文档按学习路径组织，位于项目根目录的 `docs/` 文件夹：
 | 文件 | 核心类/函数 | 说明 |
 |------|------------|------|
 | `__init__.py` | `Star`, `Context`, `MessageEvent` | 顶层入口 |
-| `star.py` | `Star` | v4 原生插件基类 |
+| `star.py` | `Star` | astrbot-sdk 原生插件基类 |
 | `context.py` | `Context` | 运行时上下文 |
-| `decorators.py` | 所有装饰器 | v4 装饰器定义 |
+| `decorators.py` | 所有装饰器 | astrbot-sdk 装饰器定义 |
 | `filters.py` | `PlatformFilter`, `MessageTypeFilter` | 过滤器定义 |
 | `errors.py` | `AstrBotError` | 统一错误模型 |
 | `events.py` | `MessageEvent` | 事件模型 |
@@ -409,10 +409,10 @@ SDK 文档按学习路径组织，位于项目根目录的 `docs/` 文件夹：
 
 ### 版本信息
 
-- **SDK 架构版本**: v4
+- **SDK 架构版本**: astrbot-sdk
 - **协议版本**: 1.0
 - **Python 要求**: >=3.12
 
 ---
 
-> 本文档描述 AstrBot SDK v4 的架构设计，完整 API 请查阅 `docs/` 目录及 `src/astrbot_sdk/` 源码。
+> 本文档描述 AstrBot SDK (astrbot-sdk) 的架构设计，完整 API 请查阅 `docs/` 目录及 `src/astrbot_sdk/` 源码。

@@ -2,7 +2,7 @@
 
 ## 概述
 
-`Star` 是 AstrBot SDK 的插件基类，所有 v4 原生插件都必须继承此类。它提供了完整的插件生命周期管理、上下文访问和能力集成。
+`Star` 是 AstrBot SDK 的插件基类，所有 astrbot-sdk 原生插件都必须继承此类。它提供了完整的插件生命周期管理、上下文访问和能力集成。
 
 **模块路径**: `astrbot_sdk.star.Star`
 
@@ -12,7 +12,7 @@
 
 ```python
 class Star(PluginKVStoreMixin):
-    """v4 原生插件基类"""
+    """astrbot-sdk 原生插件基类"""
 
     __handlers__: tuple[str, ...]  # 自动收集的处理器列表
 
@@ -342,7 +342,7 @@ class MyPlugin(Star):
 
 ### `__astrbot_is_new_star__()`
 
-标识类为 v4 原生插件。
+标识类为 astrbot-sdk 原生插件。
 
 **签名**:
 ```python
@@ -352,7 +352,7 @@ def __astrbot_is_new_star__(cls) -> bool
 
 **返回**: `bool` - 始终返回 `True`
 
-**说明**: 此方法用于运行时识别插件类型，v4 原生插件返回 `True`，旧版插件无此方法。
+**说明**: 此方法用于运行时识别插件类型，astrbot-sdk 原生插件返回 `True`，旧版插件无此方法。
 
 ---
 
