@@ -1,6 +1,6 @@
 # Notes
 
-## v4 架构约束
+## astrbot-sdk 架构约束
 
 ### 运行时层
 

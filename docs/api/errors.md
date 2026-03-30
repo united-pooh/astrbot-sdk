@@ -63,7 +63,7 @@ class MyPlugin(Star):
 
 ```python
 class ErrorCodes:
-    """AstrBot v4 的稳定错误码常量。"""
+    """AstrBot SDK 的稳定错误码常量。"""
 ```
 
 ### 错误码列表

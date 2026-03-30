@@ -55,7 +55,7 @@ class _FailingSendTransport(_ControlledTransport):
 def _make_peer(transport: _ControlledTransport, *, name: str = "test-plugin") -> Peer:
     return Peer(
         transport=transport,
-        peer_info=PeerInfo(name=name, role="plugin", version="v4"),
+        peer_info=PeerInfo(name=name, role="plugin", version="s5r"),
     )
 
 
@@ -82,7 +82,7 @@ async def test_initialize_marks_remote_initialized_on_active_side() -> None:
                     "peer": {
                         "name": "astrbot-core",
                         "role": "core",
-                        "version": "v4",
+                        "version": "s5r",
                     },
                     "protocol_version": "1.0",
                     "capabilities": [],

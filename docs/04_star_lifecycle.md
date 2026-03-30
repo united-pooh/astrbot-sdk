@@ -2,7 +2,7 @@
 
 ## 概述
 
-`Star` 是 AstrBot v4 SDK 的原生插件基类，提供了完整的插件生命周期管理、上下文访问和能力集成。
+`Star` 是 AstrBot SDK 的原生插件基类，提供了完整的插件生命周期管理、上下文访问和能力集成。
 
 ## 目录
 
@@ -20,7 +20,7 @@
 
 ### 什么是 Star 类？
 
-`Star` 是所有 v4 原生插件必须继承的基类，提供插件生命周期管理和能力集成。
+`Star` 是所有 astrbot-sdk 原生插件必须继承的基类，提供插件生命周期管理和能力集成。
 
 ### 核心特性
 
@@ -343,7 +343,7 @@ from astrbot_sdk import PluginMetadata
 metadata: PluginMetadata = await ctx.metadata.get_current_plugin()
 ```
 
-**建议**：使用 `StarMetadata` 以符合 v4 SDK 的命名规范。
+**建议**：使用 `StarMetadata` 以符合 astrbot-sdk 的命名规范。
 
 ### 访问元数据
 

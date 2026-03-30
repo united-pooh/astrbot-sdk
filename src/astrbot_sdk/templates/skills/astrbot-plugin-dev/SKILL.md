@@ -1,11 +1,11 @@
 ---
 name: {{ skill_dir_name }}
-description: Design, implement, test, and package AstrBot SDK v4 plugins. Activate when the request involves AstrBot plugins, plugin.yaml, main.py, Star base class, Context, MessageEvent, SDK decorators (on_command, on_message, on_event, on_schedule, conversation_command, provide_capability, register_llm_tool, http_api, background_task), PluginHarness, or astrbot-sdk CLI commands (init, validate, dev, build).
+description: Design, implement, test, and package AstrBot SDK plugins. Activate when the request involves AstrBot plugins, plugin.yaml, main.py, Star base class, Context, MessageEvent, SDK decorators (on_command, on_message, on_event, on_schedule, conversation_command, provide_capability, register_llm_tool, http_api, background_task), PluginHarness, or astrbot-sdk CLI commands (init, validate, dev, build).
 ---
 
 # AstrBot Plugin Dev
 
-Turn plugin requirements into working AstrBot SDK v4 plugins. Default to the stable public SDK surface and CLI workflow.
+Turn plugin requirements into working AstrBot SDK plugins. Default to the stable public SDK surface and CLI workflow.
 
 ## Project Context
 
