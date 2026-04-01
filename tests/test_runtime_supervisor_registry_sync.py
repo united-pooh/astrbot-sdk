@@ -8,7 +8,11 @@ from typing import Any, cast
 import pytest
 
 from src.astrbot_sdk.errors import AstrBotError, ErrorCodes
-from src.astrbot_sdk.protocol.codec import JsonProtocolCodec, MsgpackProtocolCodec
+from src.astrbot_sdk.protocol.codec import (
+    JsonProtocolCodec,
+    MsgpackProtocolCodec,
+    ProtocolCodec,
+)
 from src.astrbot_sdk.protocol.descriptors import CapabilityDescriptor
 from src.astrbot_sdk.runtime.capability_router import CapabilityRouter
 import src.astrbot_sdk.runtime.supervisor as supervisor_module
@@ -394,6 +398,34 @@ def test_worker_session_worker_command_includes_wire_codec_for_group_worker(
         str(group.metadata_path),
     ]
     assert cwd == str(tmp_path)
+
+
+def test_worker_session_worker_command_rejects_unsupported_custom_codec(
+    tmp_path: Path,
+) -> None:
+    class _CustomProtocolCodec(ProtocolCodec):
+        def encode_message(self, message: Any) -> bytes:
+            del message
+            return b""
+
+        def decode_message(self, payload: Any) -> Any:
+            del payload
+            return {}
+
+    plugin = _write_plugin_spec(tmp_path, "alpha")
+    session = WorkerSession(
+        plugin=plugin,
+        repo_root=tmp_path,
+        env_manager=cast(Any, _StaticEnvManager([plugin])),
+        capability_router=CapabilityRouter(),
+        wire_codec=_CustomProtocolCodec(),
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="unsupported wire codec for local worker subprocess",
+    ):
+        session._worker_command()
 
 
 @pytest.mark.asyncio

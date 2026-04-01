@@ -49,7 +49,7 @@ from .._internal.plugin_ids import (
 )
 from .._internal.sdk_logger import logger
 from ..errors import AstrBotError
-from ..protocol.codec import MsgpackProtocolCodec, ProtocolCodec
+from ..protocol.codec import JsonProtocolCodec, MsgpackProtocolCodec, ProtocolCodec
 from ..protocol.descriptors import CapabilityDescriptor
 from ..protocol.messages import EventMessage, InitializeOutput, PeerInfo
 from .capability_router import CapabilityRouter, StreamExecution
@@ -174,7 +174,13 @@ def _group_records_by_plugin(
 
 
 def _wire_codec_cli_name(codec: ProtocolCodec) -> str:
-    return "msgpack" if isinstance(codec, MsgpackProtocolCodec) else "json"
+    if isinstance(codec, MsgpackProtocolCodec):
+        return "msgpack"
+    if isinstance(codec, JsonProtocolCodec):
+        return "json"
+    raise ValueError(
+        f"unsupported wire codec for local worker subprocess: {type(codec).__name__}"
+    )
 
 
 class WorkerSession:
