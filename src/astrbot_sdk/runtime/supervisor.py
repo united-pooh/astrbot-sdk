@@ -173,6 +173,10 @@ def _group_records_by_plugin(
     return grouped
 
 
+def _wire_codec_cli_name(codec: ProtocolCodec) -> str:
+    return "msgpack" if isinstance(codec, MsgpackProtocolCodec) else "json"
+
+
 class WorkerSession:
     def __init__(
         self,
@@ -394,6 +398,7 @@ class WorkerSession:
                 )
 
     def _worker_command(self) -> tuple[Path, list[str], str]:
+        wire_codec = _wire_codec_cli_name(self.wire_codec)
         if self.group is not None:
             prepare_group = getattr(self.env_manager, "prepare_group_environment", None)
             if callable(prepare_group):
@@ -407,6 +412,8 @@ class WorkerSession:
                     "-m",
                     "astrbot_sdk",
                     "worker",
+                    "--wire-codec",
+                    wire_codec,
                     "--group-metadata",
                     str(self.group.metadata_path),
                 ],
@@ -423,6 +430,8 @@ class WorkerSession:
                 "-m",
                 "astrbot_sdk",
                 "worker",
+                "--wire-codec",
+                wire_codec,
                 "--plugin-dir",
                 str(plugin.plugin_dir),
             ],

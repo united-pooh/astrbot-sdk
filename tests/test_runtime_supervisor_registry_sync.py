@@ -8,10 +8,14 @@ from typing import Any, cast
 import pytest
 
 from src.astrbot_sdk.errors import AstrBotError, ErrorCodes
+from src.astrbot_sdk.protocol.codec import JsonProtocolCodec, MsgpackProtocolCodec
 from src.astrbot_sdk.protocol.descriptors import CapabilityDescriptor
 from src.astrbot_sdk.runtime.capability_router import CapabilityRouter
 import src.astrbot_sdk.runtime.supervisor as supervisor_module
-from src.astrbot_sdk.runtime.environment_groups import EnvironmentPlanResult
+from src.astrbot_sdk.runtime.environment_groups import (
+    EnvironmentGroup,
+    EnvironmentPlanResult,
+)
 from src.astrbot_sdk.runtime.loader import PluginDiscoveryResult, PluginSpec
 from src.astrbot_sdk.runtime.supervisor import SupervisorRuntime, WorkerSession
 from src.astrbot_sdk.runtime.transport import Transport
@@ -73,6 +77,12 @@ class _StaticEnvManager:
 
     def plan(self, _plugins: list[PluginSpec]) -> EnvironmentPlanResult:
         return EnvironmentPlanResult(plugins=list(self._plugins))
+
+    def prepare_environment(self, plugin: PluginSpec) -> Path:
+        return plugin.plugin_dir / ".venv" / "python"
+
+    def prepare_group_environment(self, group: EnvironmentGroup) -> Path:
+        return group.python_path
 
 
 def _write_plugin_spec(tmp_path: Path, plugin_name: str) -> PluginSpec:
@@ -312,6 +322,78 @@ def test_register_plugin_capability_rejects_duplicate_name_without_rename() -> N
             cast(Any, SimpleNamespace()),
             "alpha",
         )
+
+
+def test_worker_session_worker_command_includes_wire_codec_for_single_plugin(
+    tmp_path: Path,
+) -> None:
+    plugin = _write_plugin_spec(tmp_path, "alpha")
+    session = WorkerSession(
+        plugin=plugin,
+        repo_root=tmp_path,
+        env_manager=cast(Any, _StaticEnvManager([plugin])),
+        capability_router=CapabilityRouter(),
+        wire_codec=JsonProtocolCodec(),
+    )
+
+    python_path, command, cwd = session._worker_command()
+
+    assert python_path == plugin.plugin_dir / ".venv" / "python"
+    assert command == [
+        str(python_path),
+        "-m",
+        "astrbot_sdk",
+        "worker",
+        "--wire-codec",
+        "json",
+        "--plugin-dir",
+        str(plugin.plugin_dir),
+    ]
+    assert cwd == str(plugin.plugin_dir)
+
+
+def test_worker_session_worker_command_includes_wire_codec_for_group_worker(
+    tmp_path: Path,
+) -> None:
+    alpha = _write_plugin_spec(tmp_path, "alpha")
+    beta = _write_plugin_spec(tmp_path, "beta")
+    group = EnvironmentGroup(
+        id="group-alpha-beta",
+        python_version="3.12",
+        plugins=[alpha, beta],
+        source_path=tmp_path / ".astrbot" / "groups" / "group-alpha-beta" / "src",
+        lockfile_path=tmp_path / ".astrbot" / "locks" / "group-alpha-beta.lock",
+        metadata_path=tmp_path
+        / ".astrbot"
+        / "groups"
+        / "group-alpha-beta"
+        / "metadata.json",
+        venv_path=tmp_path / ".astrbot" / "envs" / "group-alpha-beta",
+        python_path=tmp_path / ".astrbot" / "envs" / "group-alpha-beta" / "python",
+        environment_fingerprint="fingerprint",
+    )
+    session = WorkerSession(
+        group=group,
+        repo_root=tmp_path,
+        env_manager=cast(Any, _StaticEnvManager([alpha, beta])),
+        capability_router=CapabilityRouter(),
+        wire_codec=MsgpackProtocolCodec(),
+    )
+
+    python_path, command, cwd = session._worker_command()
+
+    assert python_path == group.python_path
+    assert command == [
+        str(python_path),
+        "-m",
+        "astrbot_sdk",
+        "worker",
+        "--wire-codec",
+        "msgpack",
+        "--group-metadata",
+        str(group.metadata_path),
+    ]
+    assert cwd == str(tmp_path)
 
 
 @pytest.mark.asyncio
