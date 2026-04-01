@@ -175,9 +175,10 @@ class SharedPlugin(Star):
 
         _purge_module_roots("main")
         __import__("main")
+        foreign_main = sys.modules["main"]
+        assert foreign_main.__file__ is not None
         assert (
-            Path(sys.modules["main"].__file__).resolve()
-            == (foreign_dir / "main.py").resolve()
+            Path(foreign_main.__file__).resolve() == (foreign_dir / "main.py").resolve()
         )
 
         instance = _load_first_instance(plugin_dir)

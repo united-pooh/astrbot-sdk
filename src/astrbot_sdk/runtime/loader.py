@@ -1275,8 +1275,6 @@ def load_plugin(plugin: PluginSpec) -> LoadedPlugin:
                 capabilities.extend(component_capabilities)
                 llm_tools.extend(component_tools)
 
-        _expose_plugin_public_module_aliases(namespace)
-
         logger.debug(
             "Loaded SDK plugin {}: {} components, {} handlers, {} capabilities, {} llm tools, {} agents",
             plugin.name,
@@ -1382,25 +1380,6 @@ def _purge_plugin_package(package_name: str) -> None:
     for module_name in list(sys.modules):
         if module_name == package_name or module_name.startswith(f"{package_name}."):
             sys.modules.pop(module_name, None)
-
-
-def _expose_plugin_public_module_aliases(namespace: _PluginImportNamespace) -> None:
-    package_prefix = f"{namespace.package_name}."
-    alias_map: dict[str, types.ModuleType] = {}
-    for module_name, module in list(sys.modules.items()):
-        if not isinstance(module, types.ModuleType):
-            continue
-        if module_name == namespace.package_name:
-            continue
-        if not module_name.startswith(package_prefix):
-            continue
-        public_name = module_name.removeprefix(package_prefix)
-        if not public_name:
-            continue
-        alias_map[public_name] = module
-
-    for alias_name in sorted(alias_map, key=lambda item: item.count(".")):
-        sys.modules[alias_name] = alias_map[alias_name]
 
 
 def _purge_plugin_bytecode(plugin_dir: Path) -> None:
