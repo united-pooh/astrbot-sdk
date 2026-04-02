@@ -391,6 +391,40 @@ async def test_mock_context_list_platforms_returns_facades_for_valid_instances()
 
 
 @pytest.mark.asyncio
+async def test_mock_context_platform_lookup_reuses_normalized_instance_records() -> (
+    None
+):
+    ctx = MockContext(plugin_id="plain-plugin")
+    ctx.router.set_platform_instances(
+        [
+            {
+                "id": "mock-platform",
+                "name": "Mock Platform",
+                "type": "mock",
+                "status": "running",
+            },
+            {
+                "id": "mock-platform-2",
+                "name": "Backup Platform",
+                "type": "backup",
+                "status": "stopped",
+            },
+        ]
+    )
+
+    by_type = await ctx.get_platform("mock")
+    by_name = await ctx.get_platform("backup platform")
+    by_id = await ctx.get_platform_inst("mock-platform-2")
+
+    assert by_type is not None
+    assert by_type.id == "mock-platform"
+    assert by_name is not None
+    assert by_name.id == "mock-platform-2"
+    assert by_id is not None
+    assert by_id.type == "backup"
+
+
+@pytest.mark.asyncio
 async def test_provider_manager_methods_copy_caller_supplied_config_dicts() -> None:
     peer = _ProviderMutationPeer()
     manager = ProviderManagerClient(
