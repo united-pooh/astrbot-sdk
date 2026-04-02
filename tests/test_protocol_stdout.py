@@ -58,6 +58,41 @@ def test_resolve_protocol_stdout_supports_file_path(
     opened_stdout.close()
 
 
+def test_snapshot_watch_files_skips_build_artifacts_and_caches(tmp_path: Path) -> None:
+    (tmp_path / "main.py").write_text("print('ok')\n", encoding="utf-8")
+    (tmp_path / ".venv").mkdir()
+    (tmp_path / ".venv" / "ignored.py").write_text("ignored\n", encoding="utf-8")
+    (tmp_path / "__pycache__").mkdir()
+    (tmp_path / "__pycache__" / "module.pyc").write_bytes(b"pyc")
+    (tmp_path / "dist").mkdir()
+    (tmp_path / "dist" / "artifact.txt").write_text("ignored\n", encoding="utf-8")
+    (tmp_path / "nested").mkdir()
+    (tmp_path / "nested" / "keep.txt").write_text("keep\n", encoding="utf-8")
+    (tmp_path / "AGENTS.md").write_text("ignored\n", encoding="utf-8")
+
+    snapshot = cli._snapshot_watch_files(tmp_path)
+
+    assert sorted(snapshot) == ["main.py", "nested/keep.txt"]
+
+
+def test_local_dev_state_dispatch_kwargs_normalize_fields() -> None:
+    kwargs = cli._LocalDevState(
+        session_id=123,  # type: ignore[arg-type]
+        user_id=456,  # type: ignore[arg-type]
+        platform="qq",
+        group_id=None,
+        event_type="message",
+    ).dispatch_kwargs()
+
+    assert kwargs == {
+        "session_id": "123",
+        "user_id": "456",
+        "platform": "qq",
+        "group_id": None,
+        "event_type": "message",
+    }
+
+
 def test_run_command_resolves_protocol_stdout_to_stream(
     monkeypatch, tmp_path: Path
 ) -> None:

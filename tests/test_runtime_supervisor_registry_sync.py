@@ -366,10 +366,12 @@ async def test_worker_session_start_surfaces_init_waiter_failure(
     monkeypatch.setattr(supervisor_module, "StdioTransport", _StubStdioTransport)
     monkeypatch.setattr(supervisor_module, "Peer", _FailingInitPeer)
 
-    with pytest.raises(AstrBotError, match="连接在初始化完成前关闭") as exc_info:
+    with pytest.raises(RuntimeError, match="worker alpha 在初始化阶段退出") as exc_info:
         await session.start()
 
-    assert exc_info.value.code == ErrorCodes.PROTOCOL_ERROR
+    assert isinstance(exc_info.value.__cause__, AstrBotError)
+    assert "连接在初始化完成前关闭" in str(exc_info.value.__cause__)
+    assert exc_info.value.__cause__.code == ErrorCodes.PROTOCOL_ERROR
     assert len(created_peers) == 1
     assert created_peers[0].stopped is True
 
@@ -465,6 +467,50 @@ async def test_remote_worker_session_uses_websocket_transport(
         ),
         "server_hostname": "worker.internal",
     }
+
+
+def test_worker_session_sync_remote_state_normalizes_metadata_shapes(
+    tmp_path: Path,
+) -> None:
+    plugin = _write_plugin_spec(tmp_path, "alpha")
+    session = WorkerSession(
+        plugin=plugin,
+        repo_root=tmp_path,
+        env_manager=_StaticEnvManager([plugin]),
+        capability_router=CapabilityRouter(),
+    )
+    session.peer = SimpleNamespace(
+        remote_handlers=["handler-1"],
+        remote_provided_capabilities=["capability-1"],
+        remote_metadata={
+            "loaded_plugins": ["alpha", 1],
+            "skipped_plugins": {"beta": "skip", "gamma": 3},
+            "capability_sources": {"alpha.echo": "alpha", "beta.echo": 2},
+            "issues": [
+                {"plugin_id": "alpha", "message": "boom"},
+                "ignore-me",
+            ],
+            "llm_tools": [{"plugin_id": "alpha", "name": "tool-1"}, "ignore-me"],
+            "agents": [{"plugin_id": "alpha", "name": "agent-1"}, "ignore-me"],
+            "worker_registry": [
+                {"name": "alpha", "config": {"enabled": True}},
+                {"name": "", "config": {}},
+                "ignore-me",
+            ],
+        },
+    )
+
+    session._sync_remote_state()
+
+    assert session.handlers == ["handler-1"]
+    assert session.provided_capabilities == ["capability-1"]
+    assert session.loaded_plugins == ["alpha"]
+    assert session.skipped_plugins == {"beta": "skip"}
+    assert session.capability_sources == {"alpha.echo": "alpha"}
+    assert [issue.message for issue in session.issues] == ["boom"]
+    assert session.llm_tools == [{"plugin_id": "alpha", "name": "tool-1"}]
+    assert session.agents == [{"plugin_id": "alpha", "name": "agent-1"}]
+    assert session.worker_registry == [{"name": "alpha", "config": {"enabled": True}}]
 
 
 @pytest.mark.asyncio

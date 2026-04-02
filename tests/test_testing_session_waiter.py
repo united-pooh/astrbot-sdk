@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
+import astrbot_sdk.runtime.handler_dispatcher as handler_dispatcher_module
 from astrbot_sdk._internal.invocation_context import caller_plugin_scope
 from astrbot_sdk.context import CancelToken, Context
 from astrbot_sdk.events import MessageEvent
@@ -421,6 +422,80 @@ async def test_session_waiter_dispatch_uses_registering_plugin_id() -> None:
     await task
 
     assert seen_plugin_ids == ["plugin.alpha"]
+
+
+@pytest.mark.asyncio
+async def test_session_waiter_dispatch_builds_runtime_context_once() -> None:
+    peer = MockPeer(MockCapabilityRouter())
+    dispatcher = HandlerDispatcher(
+        plugin_id="worker-group",
+        peer=peer,
+        handlers=[],
+    )
+    event_payload = {
+        "type": "message",
+        "event_type": "message",
+        "text": "followup",
+        "session_id": "session-1",
+        "user_id": "tester",
+        "platform": "test",
+        "platform_id": "test",
+        "message_type": "private",
+        "raw": {"event_type": "message"},
+    }
+    register_event = MessageEvent.from_payload(
+        event_payload,
+        context=Context(peer=peer, plugin_id="plugin.alpha"),
+    )
+    created_plugin_ids: list[str] = []
+    real_context = handler_dispatcher_module.Context
+
+    class _RecordingContext(real_context):
+        def __init__(self, *args, **kwargs) -> None:
+            created_plugin_ids.append(str(kwargs.get("plugin_id")))
+            super().__init__(*args, **kwargs)
+
+    handler_dispatcher_module.Context = _RecordingContext
+
+    async def capture_waiter(
+        controller: SessionController,
+        waiter_event: MessageEvent,
+    ) -> None:
+        assert waiter_event._context is not None
+        assert waiter_event._context.plugin_id == "plugin.alpha"
+        controller.stop()
+
+    async def waiter_task() -> None:
+        with caller_plugin_scope("plugin.alpha"):
+            await dispatcher._session_waiters.register(
+                event=register_event,
+                handler=capture_waiter,
+                timeout=30,
+                record_history_chains=False,
+            )
+
+    task = asyncio.create_task(waiter_task())
+    await asyncio.sleep(0)
+
+    try:
+        await dispatcher.invoke(
+            InvokeMessage(
+                id="req-session-waiter-single-context",
+                capability="handler.invoke",
+                input={
+                    "handler_id": "__sdk_session_waiter__",
+                    "event": dict(event_payload),
+                    "args": {},
+                },
+            ),
+            CancelToken(),
+        )
+    finally:
+        handler_dispatcher_module.Context = real_context
+
+    await task
+
+    assert created_plugin_ids == ["plugin.alpha"]
 
 
 @pytest.mark.asyncio

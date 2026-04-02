@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import json
 import shutil
 import sys
 from contextlib import contextmanager
@@ -11,6 +12,8 @@ import pytest
 
 from astrbot_sdk.runtime.loader import (
     discover_plugins,
+    load_plugin_config,
+    load_plugin_config_schema,
     load_plugin,
     load_plugin_spec,
     validate_plugin_spec,
@@ -33,6 +36,7 @@ def _write_plugin(
 _schema_version: 2
 name: {plugin_name}
 author: tests
+repo: astrbot/{plugin_name}
 version: 1.0.0
 desc: loader regression tests
 
@@ -119,14 +123,20 @@ class ReloadPlugin(Star):
         second = _load_first_instance(plugin_dir)
         assert second.value == "v2"
         assert second.__class__ is not first.__class__
+        second_main_module = sys.modules[second.__class__.__module__]
+        second_support_module = sys.modules[
+            ".".join(second.__class__.__module__.split(".")[:-1] + ["support.value"])
+        ]
         assert (
-            Path(sys.modules["main"].__file__).resolve()
+            Path(second_main_module.__file__).resolve()
             == (plugin_dir / "main.py").resolve()
         )
         assert (
-            Path(sys.modules["support.value"].__file__).resolve()
+            Path(second_support_module.__file__).resolve()
             == (plugin_dir / "support" / "value.py").resolve()
         )
+        assert "main" not in sys.modules
+        assert "support.value" not in sys.modules
 
 
 def test_load_plugin_prefers_target_plugin_dir_for_generic_main_module(
@@ -173,10 +183,14 @@ class SharedPlugin(Star):
         instance = _load_first_instance(plugin_dir)
 
         assert instance.source == "plugin"
-        assert sys.path[0] == str(plugin_dir.resolve())
+        loaded_main_module = sys.modules[instance.__class__.__module__]
+        assert (
+            Path(loaded_main_module.__file__).resolve()
+            == (plugin_dir / "main.py").resolve()
+        )
         assert (
             Path(sys.modules["main"].__file__).resolve()
-            == (plugin_dir / "main.py").resolve()
+            == (foreign_dir / "main.py").resolve()
         )
 
 
@@ -253,6 +267,35 @@ class NoRequirementsPlugin(Star):
         instance = _load_first_instance(plugin_dir)
 
     assert instance.value == "no-deps"
+
+
+def test_plugin_config_helpers_treat_non_object_json_as_empty(tmp_path: Path) -> None:
+    plugin_dir = tmp_path / "config_plugin"
+    _write_plugin(
+        plugin_dir,
+        plugin_name="config_plugin",
+        class_name="ConfigPlugin",
+        main_source="""
+from astrbot_sdk import Star
+
+
+class ConfigPlugin(Star):
+    pass
+""",
+    )
+    plugin = load_plugin_spec(plugin_dir)
+    validate_plugin_spec(plugin)
+
+    (plugin_dir / "_conf_schema.json").write_text(
+        json.dumps(["not-an-object"]),
+        encoding="utf-8",
+    )
+    config_path = plugin_dir / "data" / "config" / "config_plugin_config.json"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(json.dumps(["still-not-an-object"]), encoding="utf-8")
+
+    assert load_plugin_config_schema(plugin) == {}
+    assert load_plugin_config(plugin) == {}
 
 
 def test_load_plugin_rejects_capability_without_plugin_prefix(tmp_path: Path) -> None:
