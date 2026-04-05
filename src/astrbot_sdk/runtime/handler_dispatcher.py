@@ -650,6 +650,7 @@ class HandlerDispatcher:
         _mark_session_waiter_background_task(task)
 
         def _on_done(done_task: asyncio.Task[Any]) -> None:
+            _cleanup_conversation()
             _unmark_session_waiter_background_task(done_task)
 
         task.add_done_callback(_on_done)

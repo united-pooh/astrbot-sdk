@@ -282,9 +282,44 @@ async def test_start_conversation_replaces_existing_session_and_registers_new_on
     assert fail_call.args[0] == previous_session.session_key
     assert isinstance(fail_call.args[1], ConversationReplaced)
 
+    active = dispatcher._conversations.get("test-plugin:session-1")
+    if active is not None:
+        assert active.session is not previous_session
+        await active.task
+    assert "test-plugin:session-1" not in dispatcher._conversations
+
+
+@pytest.mark.asyncio
+async def test_start_conversation_cleans_up_completed_session_without_awaiting_wrapper() -> (
+    None
+):
+    peer = MockPeer(MockCapabilityRouter())
+    dispatcher = HandlerDispatcher(plugin_id="test-plugin", peer=peer, handlers=[])
+    event, ctx = _build_event(peer=peer)
+
+    async def handler(conversation: ConversationSession) -> None:
+        conversation.close(ConversationState.COMPLETED)
+
+    loaded = _build_loaded_handler(
+        handler,
+        conversation=ConversationMeta(),
+    )
+
+    summary = await dispatcher._start_conversation(
+        loaded,
+        event,
+        ctx,
+        {},
+        schedule_context=None,
+    )
+
+    assert summary == {"sent_message": False, "stop": True, "call_llm": False}
+    assert "test-plugin:session-1" in dispatcher._conversations
+
     active = dispatcher._conversations["test-plugin:session-1"]
-    assert active.session is not previous_session
-    await active.task
+    await asyncio.wait_for(active.task.task, timeout=1)
+    await asyncio.sleep(0)
+
     assert "test-plugin:session-1" not in dispatcher._conversations
 
 
