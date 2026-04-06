@@ -103,11 +103,13 @@ def test_run_command_resolves_protocol_stdout_to_stream(
         plugins_dir: Path,
         stdout=None,
         workers_manifest: Path | None = None,
+        wire_codec: str | None = None,
         **_,
     ) -> None:
         captured["plugins_dir"] = plugins_dir
         captured["stdout_name"] = getattr(stdout, "name", None)
         captured["workers_manifest"] = workers_manifest
+        captured["wire_codec"] = wire_codec
 
     def fake_run_async_entrypoint(entrypoint, **_) -> None:
         asyncio.run(entrypoint)
@@ -126,6 +128,8 @@ def test_run_command_resolves_protocol_stdout_to_stream(
             str(tmp_path / "workers.yaml"),
             "--protocol-stdout",
             "silent",
+            "--wire-codec",
+            "json",
         ],
     )
 
@@ -134,6 +138,7 @@ def test_run_command_resolves_protocol_stdout_to_stream(
         "plugins_dir": tmp_path,
         "stdout_name": os.devnull,
         "workers_manifest": tmp_path / "workers.yaml",
+        "wire_codec": "json",
     }
 
 
@@ -150,11 +155,13 @@ def test_worker_command_resolves_protocol_stdout_to_stream(
         plugin_dir: Path | None = None,
         group_metadata: Path | None = None,
         stdout=None,
+        wire_codec: str | None = None,
         **_,
     ) -> None:
         captured["plugin_dir"] = plugin_dir
         captured["group_metadata"] = group_metadata
         captured["stdout_name"] = getattr(stdout, "name", None)
+        captured["wire_codec"] = wire_codec
 
     def fake_run_async_entrypoint(entrypoint, **_) -> None:
         asyncio.run(entrypoint)
@@ -171,6 +178,8 @@ def test_worker_command_resolves_protocol_stdout_to_stream(
             str(plugin_dir),
             "--protocol-stdout",
             str(output_path),
+            "--wire-codec",
+            "json",
         ],
     )
 
@@ -179,6 +188,7 @@ def test_worker_command_resolves_protocol_stdout_to_stream(
         "plugin_dir": plugin_dir,
         "group_metadata": None,
         "stdout_name": str(output_path),
+        "wire_codec": "json",
     }
 
 
@@ -204,6 +214,7 @@ def test_serve_worker_command_passes_websocket_parameters(
         tls_ca_file: Path,
         tls_cert_file: Path,
         tls_key_file: Path,
+        wire_codec: str | None = None,
         **_,
     ) -> None:
         captured["worker_id"] = worker_id
@@ -214,6 +225,7 @@ def test_serve_worker_command_passes_websocket_parameters(
         captured["tls_ca_file"] = tls_ca_file
         captured["tls_cert_file"] = tls_cert_file
         captured["tls_key_file"] = tls_key_file
+        captured["wire_codec"] = wire_codec
 
     def fake_run_async_entrypoint(entrypoint, **_) -> None:
         asyncio.run(entrypoint)
@@ -242,6 +254,8 @@ def test_serve_worker_command_passes_websocket_parameters(
             str(cert_file),
             "--tls-key-file",
             str(key_file),
+            "--wire-codec",
+            "json",
         ],
     )
 
@@ -255,4 +269,5 @@ def test_serve_worker_command_passes_websocket_parameters(
         "tls_ca_file": ca_file,
         "tls_cert_file": cert_file,
         "tls_key_file": key_file,
+        "wire_codec": "json",
     }

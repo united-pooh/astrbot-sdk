@@ -47,6 +47,7 @@ def _write_plugin(
             _schema_version: 2
             name: {name}
             author: tests
+            repo: https://github.com/tests/{name}
             version: 1.0.0
             desc: command group tests
 

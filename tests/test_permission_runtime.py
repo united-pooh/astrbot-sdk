@@ -16,6 +16,7 @@ def _write_permission_plugin(plugin_dir: Path) -> None:
 _schema_version: 2
 name: permission_runtime_plugin
 author: tests
+repo: https://github.com/tests/permission_runtime_plugin
 version: 1.0.0
 desc: permission runtime tests
 

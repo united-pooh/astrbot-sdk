@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# pyright: reportMissingImports=false
+
 import asyncio
 import json
 from pathlib import Path
@@ -37,6 +39,7 @@ def _write_plugin(
     manifest_lines.extend(
         [
             "author: tests",
+            f"repo: https://github.com/tests/{name}",
             "version: 1.0.0",
             f"desc: {description}",
         ]
@@ -437,14 +440,10 @@ async def test_star_default_on_error_replies_through_real_handler_dispatch(
     async with PluginHarness.from_plugin_dir(plugin_dir) as harness:
         with pytest.raises(AstrBotError, match="bad payload"):
             await harness.dispatch_text("invalid")
-        assert harness.sent_messages[-1].text is not None
-        assert "check payload" in harness.sent_messages[-1].text
-        assert "错误码：invalid_input" in harness.sent_messages[-1].text
-        assert "原因：bad payload" in harness.sent_messages[-1].text
-        assert "https://example.com/docs" in harness.sent_messages[-1].text
-        assert '"a": 1' in harness.sent_messages[-1].text
-        assert '"b": 2' in harness.sent_messages[-1].text
+        assert harness.sent_messages[-1].text == (
+            "check payload\n文档：https://example.com/docs\n详情：{'b': 2, 'a': 1}"
+        )
 
         with pytest.raises(RuntimeError, match="boom"):
             await harness.dispatch_text("unknown")
-        assert harness.sent_messages[-1].text == "未处理异常：RuntimeError: boom"
+        assert harness.sent_messages[-1].text == "出了点问题，请联系插件作者"

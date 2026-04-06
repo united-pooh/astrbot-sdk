@@ -13,7 +13,11 @@ def test_init_normalizes_plugin_name_and_adds_prefix() -> None:
     runner = CliRunner()
 
     with runner.isolated_filesystem():
-        result = runner.invoke(cli, ["init", "demo-plugin"])
+        result = runner.invoke(
+            cli,
+            ["init", "demo-plugin"],
+            input="Alice\nExample plugin\n\n",
+        )
 
         assert result.exit_code == 0
         plugin_dir = Path("astrbot_plugin_demo_plugin")
@@ -21,6 +25,8 @@ def test_init_normalizes_plugin_name_and_adds_prefix() -> None:
         manifest = (plugin_dir / "plugin.yaml").read_text(encoding="utf-8")
         assert "name: astrbot_plugin_demo_plugin" in manifest
         assert "display_name: demo-plugin" in manifest
+        assert "author: Alice" in manifest
+        assert "desc: Example plugin" in manifest
         assert "version: 1.0.0" in manifest
         agents_notes = (plugin_dir / "AGENTS.md").read_text(encoding="utf-8")
         claude_notes = (plugin_dir / "CLAUDE.md").read_text(encoding="utf-8")
@@ -58,7 +64,11 @@ def test_init_generates_plugin_gitignore() -> None:
     runner = CliRunner()
 
     with runner.isolated_filesystem():
-        result = runner.invoke(cli, ["init", "demo-plugin"])
+        result = runner.invoke(
+            cli,
+            ["init", "demo-plugin"],
+            input="Alice\n\n\n",
+        )
 
         assert result.exit_code == 0
         plugin_dir = Path("astrbot_plugin_demo_plugin")
@@ -116,7 +126,11 @@ def test_init_generates_claude_agent_directory() -> None:
     runner = CliRunner()
 
     with runner.isolated_filesystem():
-        result = runner.invoke(cli, ["init", "demo-plugin", "--agents", "claude"])
+        result = runner.invoke(
+            cli,
+            ["init", "demo-plugin", "--agents", "claude"],
+            input="Alice\n\n\n",
+        )
 
         assert result.exit_code == 0
         plugin_dir = Path("astrbot_plugin_demo_plugin")
@@ -151,6 +165,7 @@ def test_init_generates_multiple_agent_directories() -> None:
         result = runner.invoke(
             cli,
             ["init", "demo-plugin", "--agents", "claude,codex"],
+            input="Alice\n\n\n",
         )
 
         assert result.exit_code == 0
@@ -180,6 +195,7 @@ def test_init_deduplicates_agents_case_insensitively() -> None:
         result = runner.invoke(
             cli,
             ["init", "demo-plugin", "--agents", "Claude,codex,CLAUDE"],
+            input="Alice\n\n\n",
         )
 
         assert result.exit_code == 0
@@ -212,7 +228,11 @@ def test_init_generates_opencode_agent_directory() -> None:
     runner = CliRunner()
 
     with runner.isolated_filesystem():
-        result = runner.invoke(cli, ["init", "demo-plugin", "--agents", "opencode"])
+        result = runner.invoke(
+            cli,
+            ["init", "demo-plugin", "--agents", "opencode"],
+            input="Alice\n\n\n",
+        )
 
         assert result.exit_code == 0
         plugin_dir = Path("astrbot_plugin_demo_plugin")
@@ -232,6 +252,7 @@ def test_build_excludes_generated_agent_skill_directories() -> None:
         init_result = runner.invoke(
             cli,
             ["init", "demo-plugin", "--agents", "claude,codex,opencode"],
+            input="Alice\n\n\n",
         )
         assert init_result.exit_code == 0
 
