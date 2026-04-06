@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# pyright: reportMissingImports=false
+
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -62,13 +64,9 @@ async def test_default_on_error_formats_astrbot_error_reply() -> None:
 
     await Star.default_on_error(error, event, SimpleNamespace())
 
-    assert len(event.replies) == 1
-    assert "check payload" in event.replies[0]
-    assert "错误码：invalid_input" in event.replies[0]
-    assert "原因：bad payload" in event.replies[0]
-    assert "https://example.com/docs" in event.replies[0]
-    assert '"a": 1' in event.replies[0]
-    assert '"b": 2' in event.replies[0]
+    assert event.replies == [
+        "check payload\n文档：https://example.com/docs\n详情：{'b': 2, 'a': 1}"
+    ]
 
 
 @pytest.mark.asyncio
@@ -78,7 +76,7 @@ async def test_default_on_error_exposes_internal_error_message_when_hint_is_plac
 
     await Star.default_on_error(error, event, SimpleNamespace())
 
-    assert event.replies == ["database unavailable\n错误码：internal_error"]
+    assert event.replies == ["请联系插件作者"]
 
 
 @pytest.mark.asyncio
@@ -91,10 +89,7 @@ async def test_default_on_error_keeps_rate_limit_reply_user_friendly() -> None:
 
     await Star.default_on_error(error, event, SimpleNamespace())
 
-    assert len(event.replies) == 1
-    assert "操作过于频繁，请 30 秒后再试" in event.replies[0]
-    assert "错误码：rate_limited" in event.replies[0]
-    assert "handler invocation is rate limited" not in event.replies[0]
+    assert event.replies == ["操作过于频繁，请 30 秒后再试\n详情：{'retry_after': 30}"]
 
 
 @pytest.mark.asyncio
@@ -103,7 +98,7 @@ async def test_default_on_error_replies_real_message_for_unknown_errors() -> Non
 
     await Star.default_on_error(RuntimeError("boom"), event, SimpleNamespace())
 
-    assert event.replies == ["未处理异常：RuntimeError: boom"]
+    assert event.replies == ["出了点问题，请联系插件作者"]
 
 
 @pytest.mark.asyncio

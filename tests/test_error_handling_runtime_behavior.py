@@ -38,6 +38,7 @@ def _write_plugin(
                 "_schema_version: 2",
                 f"name: {name}",
                 "author: tests",
+                f"repo: https://github.com/tests/{name}",
                 "version: 1.0.0",
                 "desc: error handling runtime tests",
                 "runtime:",

@@ -34,6 +34,7 @@ def _write_plugin(
             _schema_version: 2
             name: {name}
             author: tests
+            repo: https://github.com/tests/{name}
             version: 1.0.0
             desc: decorator runtime behavior tests
 
@@ -657,23 +658,24 @@ async def test_register_llm_tool_and_register_agent_flow_through_runtime_capabil
             {"name": "helper_agent"},
         )
 
-        assert agent_list == {
-            "agents": [
-                {
-                    "name": "helper_agent",
-                    "description": "Agent metadata for runtime registry",
-                    "tool_names": ["get_weather"],
-                    "runner_class": "main.HelperAgent",
-                }
-            ]
+        expected_agent = {
+            "name": "helper_agent",
+            "description": "Agent metadata for runtime registry",
+            "tool_names": ["get_weather"],
         }
-        assert agent_get == {
-            "agent": {
-                "name": "helper_agent",
-                "description": "Agent metadata for runtime registry",
-                "tool_names": ["get_weather"],
-                "runner_class": "main.HelperAgent",
-            }
+        assert len(agent_list["agents"]) == 1
+        listed_agent = agent_list["agents"][0]
+        assert listed_agent | {"runner_class": None} == expected_agent | {
+            "runner_class": None
         }
+        assert listed_agent["runner_class"].startswith(
+            "astrbot_ext_tool_agent_runtime_plugin_"
+        )
+        assert listed_agent["runner_class"].endswith(".main.HelperAgent")
+
+        assert agent_get["agent"] | {"runner_class": None} == expected_agent | {
+            "runner_class": None
+        }
+        assert agent_get["agent"]["runner_class"] == listed_agent["runner_class"]
     finally:
         await harness.stop()

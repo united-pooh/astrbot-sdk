@@ -17,6 +17,7 @@ def _write_overlay_test_plugin(plugin_dir: Path) -> None:
 _schema_version: 2
 name: overlay_test_plugin
 author: tests
+repo: https://github.com/tests/overlay_test_plugin
 version: 1.0.0
 desc: request overlay regression tests
 
@@ -63,6 +64,12 @@ async def test_schedule_handler_preserves_request_overlay_state(tmp_path: Path) 
     _write_overlay_test_plugin(plugin_dir)
 
     async with PluginHarness.from_plugin_dir(plugin_dir) as harness:
+        assert harness.loaded_plugin is not None
+        handler_id = next(
+            handler.descriptor.id
+            for handler in harness.loaded_plugin.handlers
+            if handler.descriptor.id.endswith(".scheduled")
+        )
         payload = harness.build_event_payload(
             text="",
             event_type="schedule",
@@ -71,7 +78,7 @@ async def test_schedule_handler_preserves_request_overlay_state(tmp_path: Path) 
         payload["schedule"] = {
             "schedule_id": "schedule-1",
             "plugin_id": "overlay_test_plugin",
-            "handler_id": "overlay_test_plugin:main.OverlayPlugin.scheduled",
+            "handler_id": handler_id,
             "trigger_kind": "interval",
             "interval_seconds": 60,
         }

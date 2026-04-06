@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import pytest
-from astrbot_sdk.errors import AstrBotError
-from astrbot_sdk.protocol.messages import ErrorPayload, ResultMessage
+from src.astrbot_sdk.errors import AstrBotError
+from src.astrbot_sdk.protocol.messages import ErrorPayload, ResultMessage
 
 pytestmark = pytest.mark.unit
 
@@ -44,8 +44,8 @@ def test_failed_result_round_trip_preserves_error_metadata() -> None:
     assert restored.details == error.details
 
 
-def test_internal_error_defaults_to_exposing_message_via_default_handler() -> None:
+def test_internal_error_defaults_to_placeholder_user_hint() -> None:
     error = AstrBotError.internal_error("database unavailable")
 
-    assert error.hint == ""
+    assert error.hint == "请联系插件作者"
     assert error.message == "database unavailable"
