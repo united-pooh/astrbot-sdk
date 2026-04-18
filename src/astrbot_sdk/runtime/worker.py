@@ -56,37 +56,12 @@ __all__ = [
     "_load_group_plugin_specs",
 ]
 
-GLOBAL_MCP_RISK_ATTR = "__astrbot_acknowledge_global_mcp_risk__"
-
 
 @dataclass(slots=True)
 class GroupPluginRuntimeState:
     plugin: PluginSpec
     loaded_plugin: LoadedPlugin
     lifecycle_context: RuntimeContext
-
-
-def _plugin_acknowledges_global_mcp_risk(instances: list[Any]) -> bool:
-    return any(
-        bool(getattr(instance.__class__, GLOBAL_MCP_RISK_ATTR, False))
-        for instance in instances
-    )
-
-
-def _metadata_plugin_instances(loaded_plugin: Any) -> list[Any]:
-    """Return plugin instances for metadata-only inspection.
-
-    Metadata serialization is also exercised by lightweight tests that stub
-    ``loaded_plugin`` with only the fields relevant to the payload. Missing
-    ``instances`` means the plugin cannot acknowledge the global MCP risk, but
-    it should not break issue/metadata reporting.
-    """
-    instances = getattr(loaded_plugin, "instances", [])
-    if isinstance(instances, list):
-        return instances
-    if isinstance(instances, tuple):
-        return list(instances)
-    return []
 
 
 def _load_group_plugin_specs(group_metadata_path: Path) -> tuple[str, list[PluginSpec]]:
@@ -162,7 +137,6 @@ def _build_worker_initialize_metadata(
     capability_sources: dict[str, str] = {}
     llm_tools: list[dict[str, Any]] = []
     agents: list[dict[str, Any]] = []
-    acknowledge_global_mcp_risk = False
 
     for plugin, loaded_plugin in loaded_plugins:
         plugin_name = plugin.name
@@ -186,12 +160,6 @@ def _build_worker_initialize_metadata(
             }
             for agent in loaded_plugin.agents
         )
-        acknowledge_global_mcp_risk = (
-            acknowledge_global_mcp_risk
-            or _plugin_acknowledges_global_mcp_risk(
-                _metadata_plugin_instances(loaded_plugin)
-            )
-        )
 
     return {
         "worker_id": worker_id,
@@ -209,7 +177,6 @@ def _build_worker_initialize_metadata(
         "issues": [issue.to_payload() for issue in issues],
         "llm_tools": llm_tools,
         "agents": agents,
-        "acknowledge_global_mcp_risk": acknowledge_global_mcp_risk,
     }
 
 

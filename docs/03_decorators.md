@@ -881,48 +881,6 @@ class MyPlugin(Star):
         return {"id": id, "data": "some data"}
 ```
 
----
-
-## MCP 装饰器
-
-### @mcp_server
-
-MCP 服务器注册装饰器。
-
-**签名：**
-```python
-def mcp_server(
-    *,
-    name: str,
-    scope: Literal["local", "global"] = "global",
-    config: dict[str, Any] | None = None,
-    timeout: float = 30.0,
-    wait_until_ready: bool = True,
-)
-```
-
-**参数：**
-- `name`: MCP 服务器名称
-- `scope`: 作用域
-  - `"local"`: 本地作用域
-  - `"global"`: 全局作用域
-- `config`: MCP 服务器配置
-- `timeout`: 超时时间（秒）
-- `wait_until_ready`: 是否等待就绪
-
-**示例：**
-
-```python
-from astrbot_sdk import Star
-from astrbot_sdk.decorators import mcp_server
-
-class MyPlugin(Star):
-    @mcp_server(name="my_mcp", scope="global", timeout=60.0)
-    async def my_mcp_server(self):
-        # MCP 服务器实现
-        pass
-```
-
 ### @register_skill
 
 技能注册装饰器。
@@ -952,29 +910,6 @@ from astrbot_sdk.decorators import register_skill
 class MyPlugin(Star):
     pass
 ```
-
-### @acknowledge_global_mcp_risk
-
-标记插件类允许修改全局 MCP 状态。
-
-**签名：**
-```python
-def acknowledge_global_mcp_risk(cls: type[Any]) -> type[Any]
-```
-
-**示例：**
-
-```python
-from astrbot_sdk import Star
-from astrbot_sdk.decorators import acknowledge_global_mcp_risk
-
-@acknowledge_global_mcp_risk
-class MyPlugin(Star):
-    # 此插件可以修改全局 MCP 状态
-    pass
-```
-
----
 
 ## 最佳实践
 

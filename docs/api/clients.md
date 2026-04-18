@@ -14,7 +14,6 @@
 - [MemoryClient - 记忆存储客户端](#memoryclient---记忆存储客户端)
 - [DBClient - KV 数据库客户端](#dbclient---kv-数据库客户端)
 - [PlatformClient - 平台消息客户端](#platformclient---平台消息客户端)
-- [FileServiceClient - 文件服务客户端](#fileserviceclient---文件服务客户端)
 - [HTTPClient - HTTP API 客户端](#httpclient---http-api-客户端)
 - [MetadataClient - 插件元数据客户端](#metadataclient---插件元数据客户端)
 - [ProviderClient - Provider 发现客户端](#providerclient---provider-发现客户端)
@@ -707,55 +706,6 @@ await ctx.platform.send_by_id(
 members = await ctx.platform.get_members("qq:group:123456")
 for member in members:
     print(f"{member['nickname']} ({member['user_id']})")
-```
-
----
-
-## FileServiceClient - 文件服务客户端
-
-提供文件令牌注册与解析能力，用于跨进程文件传递。
-
-### 导入
-
-```python
-from astrbot_sdk.clients import FileServiceClient, FileRegistration
-```
-
-### 方法
-
-#### `register_file(path, timeout=None)`
-
-注册文件到文件服务，获取访问令牌。
-
-**参数**:
-- `path` (`str`): 文件路径
-- `timeout` (`float | None`): 超时时间（秒）
-
-**返回**: `str` - 文件访问令牌
-
-**示例**:
-
-```python
-token = await ctx.files.register_file("/path/to/file.jpg", timeout=3600)
-```
-
----
-
-#### `handle_file(token)`
-
-通过令牌解析文件路径。
-
-**参数**:
-- `token` (`str`): 文件访问令牌
-
-**返回**: `str` - 文件路径
-
-**示例**:
-
-```python
-path = await ctx.files.handle_file(token)
-with open(path, 'rb') as f:
-    data = f.read()
 ```
 
 ---

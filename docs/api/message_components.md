@@ -257,24 +257,6 @@ img = Image.fromFileSystem("/path/to/image.jpg")
 img = Image.fromBase64("iVBORw0KGgo...")
 ```
 
-### 实例方法
-
-#### `convert_to_file_path()`
-
-将图片转换为本地文件路径（下载或解码）。
-
-```python
-path = await img.convert_to_file_path()
-```
-
-#### `register_to_file_service()`
-
-将图片注册到文件服务，返回可访问 URL。
-
-```python
-public_url = await img.register_to_file_service()
-```
-
 ### 支持的格式
 
 ```python
@@ -334,20 +316,6 @@ audio = Record.fromFileSystem("/path/to/audio.mp3")
 
 ```python
 audio = Record.fromURL("https://example.com/audio.mp3")
-```
-
-### 实例方法
-
-#### `convert_to_file_path()`
-
-```python
-path = await audio.convert_to_file_path()
-```
-
-#### `register_to_file_service()`
-
-```python
-public_url = await audio.register_to_file_service()
 ```
 
 ---
@@ -434,25 +402,6 @@ file1 = File(name="document.pdf", url="https://example.com/doc.pdf")
 
 # 本地文件
 file2 = File(name="image.jpg", file="/path/to/image.jpg")
-```
-
-### 实例方法
-
-#### `get_file(allow_return_url=False)`
-
-获取文件路径或 URL。
-
-```python
-path = await file.get_file()
-
-# 优先返回 URL
-path = await file.get_file(allow_return_url=True)
-```
-
-#### `register_to_file_service()`
-
-```python
-public_url = await file.register_to_file_service()
 ```
 
 ### 序列化格式
@@ -866,9 +815,7 @@ async def save_image(self, event: MessageEvent):
 
     for img in images:
         try:
-            path = await img.convert_to_file_path()
-            # 保存图片...
-            await event.reply(f"已保存: {path}")
+            await event.reply(f"图片引用: {img.file or img.url}")
         except Exception as e:
             await event.reply(f"保存失败: {e}")
 ```
@@ -916,11 +863,7 @@ async def info(self, event: MessageEvent):
    - URL: `http://` 或 `https://`
    - Base64: `base64://<data>`
 
-3. **文件下载**:
-   - `convert_to_file_path()` 会下载网络文件到临时目录
-   - `register_to_file_service()` 需要运行时上下文
-
-4. **兼容性**:
+3. **兼容性**:
    - `At` 和 `AtAll` 序列化后的 type 都是 "at"
    - `Reply` 的 chain 字段在序列化时递归处理
 

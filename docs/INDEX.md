@@ -35,6 +35,7 @@
 | [09_api_reference.md](./09_api_reference.md) | 所有导出类和函数的完整参考入口 | ~30 |
 | [10_migration_guide.md](./10_migration_guide.md) | 从旧版本或其他框架迁移 | ~490 |
 | [11_security_checklist.md](./11_security_checklist.md) | 安全开发检查清单和已知问题 | ~380 |
+| [13_plugin_capability_inventory_and_risk_audit.md](./13_plugin_capability_inventory_and_risk_audit.md) | 插件作者能力盘点与多插件风险审计 | ~170 |
 | [PROJECT_ARCHITECTURE.md](./PROJECT_ARCHITECTURE.md) | SDK 架构设计文档 | ~560 |
 
 

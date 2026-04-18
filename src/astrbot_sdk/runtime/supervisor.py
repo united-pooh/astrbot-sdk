@@ -175,9 +175,7 @@ def _group_records_by_plugin(
 
 def _plugin_ids_from_worker_registry(entries: list[dict[str, Any]]) -> set[str]:
     plugin_ids = {
-        str(item.get("name", "")).strip()
-        for item in entries
-        if isinstance(item, dict)
+        str(item.get("name", "")).strip() for item in entries if isinstance(item, dict)
     }
     plugin_ids.discard("")
     return plugin_ids

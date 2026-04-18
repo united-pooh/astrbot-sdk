@@ -398,7 +398,7 @@ class Peer:
                 handlers=list(handlers),
                 provided_capabilities=list(provided_capabilities or []),
                 metadata=handshake_metadata,
-            )
+            ),
         )
         result = await future
         if result.kind != "initialize_result":
@@ -465,7 +465,7 @@ class Peer:
                 input=payload,
                 stream=False,
                 caller_plugin_id=current_caller_plugin_id(),
-            )
+            ),
         )
         result = await future
         if not result.success:
@@ -503,7 +503,7 @@ class Peer:
                 input=payload,
                 stream=True,
                 caller_plugin_id=current_caller_plugin_id(),
-            )
+            ),
         )
 
         async def iterator() -> AsyncIterator[EventMessage]:

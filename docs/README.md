@@ -241,18 +241,6 @@ chain = [Plain("文字"), Image(url="https://example.com/img.jpg")]
 await ctx.platform.send_chain(event.session_id, chain)
 ```
 
-### 4. 文件处理
-
-```python
-from astrbot_sdk.message.components import Image
-
-# 注册文件到文件服务
-img = Image.fromFileSystem("/path/to/image.jpg")
-public_url = await img.register_to_file_service()
-```
-
----
-
 ## 🛠️ 高级功能
 
 ### 1. LLM 工具注册
