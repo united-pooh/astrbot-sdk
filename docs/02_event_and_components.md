@@ -76,8 +76,7 @@ for at in at_comps:
 ```python
 images = event.get_images()
 for img in images:
-    path = await img.convert_to_file_path()
-    print(f"图片路径: {path}")
+    print(img.file or img.url)
 ```
 
 #### `get_files()`
@@ -298,10 +297,6 @@ img3 = Image.fromBase64("iVBORw0KGgo...")
 - `url`: 图片 URL
 - `path`: 本地路径
 
-**方法**：
-- `convert_to_file_path()`: 异步方法，将图片转换为本地文件路径
-- `register_to_file_service()`: 异步方法，注册到文件服务
-
 ### Record - 语音组件
 
 ```python
@@ -314,10 +309,6 @@ audio = Record.fromURL("https://example.com/audio.mp3")
 audio = Record.fromFileSystem("/path/to/audio.mp3")
 ```
 
-**方法**：
-- `convert_to_file_path()`: 异步方法，将音频转换为本地文件路径
-- `register_to_file_service()`: 异步方法，注册到文件服务
-
 ### Video - 视频组件
 
 ```python
@@ -329,10 +320,6 @@ video = Video.fromURL("https://example.com/video.mp4")
 # 本地文件
 video = Video.fromFileSystem("/path/to/video.mp4")
 ```
-
-**方法**：
-- `convert_to_file_path()`: 异步方法，将视频转换为本地文件路径
-- `register_to_file_service()`: 异步方法，注册到文件服务
 
 ### File - 文件组件
 
@@ -350,10 +337,6 @@ file2 = File(name="image.jpg", file="/path/to/image.jpg")
 - `name`: 文件名
 - `file`: 本地文件路径
 - `url`: 文件 URL
-
-**方法**：
-- `get_file(allow_return_url=False)`: 异步方法，获取文件路径
-- `register_to_file_service()`: 异步方法，注册到文件服务
 
 ### Reply - 回复组件
 
@@ -517,8 +500,7 @@ class MyPlugin(Star):
             return
 
         for img in images:
-            path = await img.convert_to_file_path()
-            await event.reply(f"收到图片: {path}")
+            await event.reply(f"收到图片: {img.file or img.url}")
 ```
 
 ### 检测@和群聊/私聊

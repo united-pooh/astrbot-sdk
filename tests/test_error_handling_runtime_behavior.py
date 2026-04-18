@@ -42,7 +42,7 @@ def _write_plugin(
                 "version: 1.0.0",
                 "desc: error handling runtime tests",
                 "runtime:",
-                '  python: "3.12"',
+                '  python: "3.10"',
                 "",
                 "components:",
                 f"  - class: main:{class_name}",

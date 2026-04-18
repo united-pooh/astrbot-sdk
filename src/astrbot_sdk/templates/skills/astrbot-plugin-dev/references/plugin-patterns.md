@@ -28,7 +28,7 @@ desc: Simple greeting plugin
 author: dev
 version: 1.0.0
 runtime:
-  python: "3.12"
+  python: "3.10"
 components:
   - class: main:GreetPlugin
 ```

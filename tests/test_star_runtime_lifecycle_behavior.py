@@ -49,7 +49,7 @@ def _write_plugin(
     manifest_lines.extend(
         [
             "runtime:",
-            '  python: "3.12"',
+            '  python: "3.10"',
             "",
             "components:",
             f"  - class: main:{class_name}",

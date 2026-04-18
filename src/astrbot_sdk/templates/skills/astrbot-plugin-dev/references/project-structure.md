@@ -10,7 +10,7 @@ desc: What the plugin does             # Short description
 author: Your Name                      # Author name
 version: 1.0.0                         # Semver
 runtime:
-  python: "3.12"                       # Python version
+  python: "3.10"                       # Python version
 components:
   - class: main:MyPluginClass          # module:ClassName
 

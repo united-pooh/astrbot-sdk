@@ -10,7 +10,6 @@
 - [MemoryClient - 记忆存储客户端](#2-memoryclient---记忆存储客户端)
 - [DBClient - KV 数据库客户端](#3-dbclient---kv-数据库客户端)
 - [PlatformClient - 平台消息客户端](#4-platformclient---平台消息客户端)
-- [FileServiceClient - 文件服务客户端](#5-fileserviceclient---文件服务客户端)
 - [HTTPClient - HTTP API 客户端](#6-httpclient---http-api-客户端)
 - [MetadataClient - 插件元数据客户端](#7-metadataclient---插件元数据客户端)
 - [其他客户端与管理器](#8-其他客户端与管理器)
@@ -284,34 +283,6 @@ members = await ctx.platform.get_members(event.session_id)
 
 ---
 
-## 5. FileServiceClient - 文件服务客户端
-
-### 导入
-
-```python
-from astrbot_sdk.clients import FileServiceClient
-```
-
-### 方法
-
-#### register_file()
-
-注册文件。当前实现依赖宿主配置 `callback_api_base`。
-
-```python
-token = await ctx.files.register_file("/path/to/file.jpg", timeout=3600)
-```
-
-#### handle_file()
-
-解析令牌。
-
-```python
-path = await ctx.files.handle_file(token)
-```
-
----
-
 ## 6. HTTPClient - HTTP API 客户端
 
 ### 导入
@@ -439,7 +410,6 @@ await ctx.metadata.save_plugin_config({"api_key": "new_key", "debug": True})
 - [ConversationManagerClient](./api/clients.md#conversationmanagerclient---对话管理客户端): 管理会话内的多轮对话；在 `Context` 中可通过 `ctx.conversations` 或 `ctx.conversation_manager` 访问。
 - [MessageHistoryManagerClient](./api/clients.md#messagehistorymanagerclient---消息历史管理客户端): 按 `MessageSession` 精确保存消息组件、发送者和元数据；在 `Context` 中可通过 `ctx.message_history` 或 `ctx.message_history_manager` 访问。
 - [KnowledgeBaseManagerClient](./api/clients.md#knowledgebasemanagerclient---知识库管理客户端): 管理知识库、文档和检索；在 `Context` 中可通过 `ctx.kbs` 或 `ctx.kb_manager` 访问。
-- [MCPManagerClient](./api/clients.md#mcpmanagerclient---mcp-管理客户端): 管理 MCP 服务器（本地/全局），创建临时会话并调用工具；在 `Context` 中可通过 `ctx.mcp` 或 `ctx.mcp_manager` 访问。
 - [PermissionClient](./api/clients.md#permissionclient---权限查询客户端): 查询用户角色和管理员列表；在 `Context` 中可通过 `ctx.permission` 访问。
 - [PermissionManagerClient](./api/clients.md#permissionmanagerclient---权限管理客户端): 添加/移除管理员；在 `Context` 中可通过 `ctx.permission_manager` 访问。
 - [RegistryClient](./api/clients.md#registryclient---handler-注册表客户端): 查询 handler 元数据，并管理 handler 白名单。

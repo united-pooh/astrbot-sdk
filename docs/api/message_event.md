@@ -304,8 +304,7 @@ async def save_images(self, event: MessageEvent):
     saved_paths = []
     for img in images:
         try:
-            local_path = await img.convert_to_file_path()
-            saved_paths.append(local_path)
+            saved_paths.append(img.file or img.url)
         except Exception as e:
             await event.reply(f"保存失败: {e}")
             return
@@ -886,103 +885,6 @@ def to_payload(self) -> dict[str, Any]
 
 ---
 
-## LLM 相关方法
-
-### `request_llm()`
-
-请求触发默认 LLM 链处理当前消息。
-
-**签名**:
-```python
-async def request_llm(self) -> bool
-```
-
-**返回**: `bool` - 是否应该调用 LLM
-
-**示例**:
-
-```python
-@on_command("ask")
-async def ask(self, event: MessageEvent):
-    should_call = await event.request_llm()
-    if should_call:
-        await event.reply("已触发 LLM 处理")
-```
-
----
-
-### `should_call_llm()`
-
-读取当前默认 LLM 决策状态。
-
-**签名**:
-```python
-async def should_call_llm(self) -> bool
-```
-
-**返回**: `bool` - 是否应该调用 LLM
-
-**示例**:
-
-```python
-@on_message()
-async def handle(self, event: MessageEvent):
-    if await event.should_call_llm():
-        response = await ctx.llm.chat(event.text)
-        await event.reply(response)
-```
-
----
-
-## 结果管理方法
-
-### `set_result()`
-
-存储请求范围的 SDK 结果到主机桥。
-
-**签名**:
-```python
-async def set_result(self, result: MessageEventResult) -> MessageEventResult
-```
-
-**参数**:
-- `result`: 消息事件结果对象
-
-**返回**: 传入的 `result` 对象
-
-**示例**:
-
-```python
-result = event.chain_result([Plain("处理结果")])
-await event.set_result(result)
-```
-
----
-
-### `get_result()`
-
-从主机桥读取当前请求范围的 SDK 结果。
-
-**签名**:
-```python
-async def get_result(self) -> MessageEventResult | None
-```
-
-**返回**: `MessageEventResult | None` - 结果对象，不存在则返回 None
-
----
-
-### `clear_result()`
-
-清除当前请求范围的 SDK 结果。
-
-**签名**:
-```python
-async def clear_result(self) -> None
-```
-
----
-
 ## 其他方法
 
 ### `get_message_outline()`
@@ -1078,9 +980,7 @@ async def save_image(self, event: MessageEvent):
 
     for img in images:
         try:
-            local_path = await img.convert_to_file_path()
-            # 保存图片...
-            await event.reply(f"已保存: {local_path}")
+            await event.reply(f"图片引用: {img.file or img.url}")
         except Exception as e:
             await event.reply(f"保存失败: {e}")
 ```

@@ -96,7 +96,7 @@ version: 1.0.0
 desc: 我的插件描述
 
 runtime:
-  python: "3.12"
+  python: "3.10"
 
 components:
   - class: main:MyPlugin
@@ -240,18 +240,6 @@ from astrbot_sdk.message.components import Plain, Image
 chain = [Plain("文字"), Image(url="https://example.com/img.jpg")]
 await ctx.platform.send_chain(event.session_id, chain)
 ```
-
-### 4. 文件处理
-
-```python
-from astrbot_sdk.message.components import Image
-
-# 注册文件到文件服务
-img = Image.fromFileSystem("/path/to/image.jpg")
-public_url = await img.register_to_file_service()
-```
-
----
 
 ## 🛠️ 高级功能
 
@@ -450,7 +438,7 @@ async def test_my_plugin():
 
 - **SDK 版本**: v4.0
 - **最后更新**: 2026-03-22
-- **Python 要求**: >= 3.12
+- **Python 要求**: >= 3.10
 - **协议版本**: P0.6
 
 ---

@@ -214,20 +214,6 @@ Must provide exactly one of `model` or `schema`.
 
 **Handler signature:** `async def handler(self, ctx: Context) -> None`
 
-### @mcp_server
-
-```python
-@mcp_server(*, name, scope="global", config=None, timeout=30.0, wait_until_ready=True)
-```
-
-| Param | Type | Default | Notes |
-|-------|------|---------|-------|
-| name | `str` | required | Non-empty |
-| scope | `"local" \| "global"` | "global" | — |
-| config | `dict \| None` | None | — |
-| timeout | `float` | 30.0 | Must be positive |
-| wait_until_ready | `bool` | True | — |
-
 ### @register_skill
 
 ```python
@@ -398,29 +384,9 @@ Composition: `all_of(*filters)`, `any_of(*filters)`.
 | list_plugins | `()` | `list[StarMetadata]` | — |
 | get_current_plugin | `()` | `StarMetadata \| None` | Current plugin's metadata |
 
-### ctx.files — File Service (FileServiceClient)
-
-File token registration and management.
-
-| Method | Signature | Returns | Notes |
-|--------|-----------|---------|-------|
-| register_file | `(path: str, timeout: float \| None = None)` | `str` | Returns a file token |
-| register_file_url | `(path: str, timeout: float \| None = None)` | `str` | Returns a public `/api/file/<token>` URL. Prefer this for image/file previews instead of sending large payloads through capabilities |
-| handle_file | `(token: str)` | `str` | Resolves a file token back to a filesystem path |
-
-Large payload guidance:
-
-- Do not send full binary files or large base64 blobs through normal capability responses.
-- Prefer `ctx.files.register_file_url(...)` for previews, downloads, and other static assets.
-- Prefer pagination or lazy loading for large lists returned by HTTP APIs.
-
 ### ctx.http — HTTP (HTTPClient)
 
 HTTP API registration and listing.
-
-### ctx.mcp — MCP Manager (MCPManagerClient)
-
-MCP server lifecycle management.
 
 ### ctx.providers — Provider Query (ProviderClient)
 

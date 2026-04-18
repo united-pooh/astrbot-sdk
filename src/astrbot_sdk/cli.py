@@ -24,12 +24,16 @@ import typing
 import zipfile
 from collections.abc import Coroutine
 from dataclasses import dataclass, field
-from importlib.resources.abc import Traversable
 from pathlib import Path
 from textwrap import dedent
 from typing import Any
 
 import click
+
+try:
+    from importlib.resources.abc import Traversable
+except ModuleNotFoundError:  # pragma: no cover - Python 3.10 fallback
+    from importlib.abc import Traversable
 
 from ._internal.sdk_logger import logger
 from .errors import AstrBotError

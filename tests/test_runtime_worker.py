@@ -20,21 +20,23 @@ from astrbot_sdk.runtime.loader import (
     PluginSpec,
 )
 from astrbot_sdk.runtime.worker import (
-    GLOBAL_MCP_RISK_ATTR,
     GroupPluginRuntimeState,
     GroupWorkerRuntime,
     PluginWorkerRuntime,
 )
 
 
-def _plugin_spec(name: str) -> PluginSpec:
-    plugin_dir = Path(f"/tmp/{name}")
+def _plugin_spec(name: str, tmp_path: Path | None = None) -> PluginSpec:
+    import tempfile
+
+    base_dir = tmp_path if tmp_path else Path(tempfile.gettempdir())
+    plugin_dir = base_dir / name
     return PluginSpec(
         name=name,
         plugin_dir=plugin_dir,
         manifest_path=plugin_dir / "plugin.yaml",
         requirements_path=plugin_dir / "requirements.txt",
-        python_version="3.12",
+        python_version="3.10",
         manifest_data={"name": name},
     )
 
@@ -71,9 +73,11 @@ async def test_plugin_worker_handle_cancel_fans_out_to_both_dispatchers() -> Non
 
 
 @pytest.mark.asyncio
-async def test_plugin_worker_start_initializes_metadata_and_handlers() -> None:
+async def test_plugin_worker_start_initializes_metadata_and_handlers(
+    tmp_path: Path,
+) -> None:
     runtime = object.__new__(PluginWorkerRuntime)
-    runtime.plugin = _plugin_spec("alpha")
+    runtime.plugin = _plugin_spec("alpha", tmp_path)
     runtime.worker_id = "alpha-worker"
     runtime.loaded_plugin = LoadedPlugin(
         plugin=runtime.plugin,
@@ -137,9 +141,11 @@ async def test_plugin_worker_start_initializes_metadata_and_handlers() -> None:
 
 
 @pytest.mark.asyncio
-async def test_plugin_worker_start_runs_on_stop_when_initialize_fails() -> None:
+async def test_plugin_worker_start_runs_on_stop_when_initialize_fails(
+    tmp_path: Path,
+) -> None:
     runtime = object.__new__(PluginWorkerRuntime)
-    runtime.plugin = _plugin_spec("alpha")
+    runtime.plugin = _plugin_spec("alpha", tmp_path)
     runtime.worker_id = "alpha-worker"
     runtime.loaded_plugin = LoadedPlugin(
         plugin=runtime.plugin,
@@ -183,9 +189,11 @@ async def test_plugin_worker_start_runs_on_stop_when_initialize_fails() -> None:
 
 
 @pytest.mark.asyncio
-async def test_group_worker_start_raises_when_all_plugins_become_inactive() -> None:
+async def test_group_worker_start_raises_when_all_plugins_become_inactive(
+    tmp_path: Path,
+) -> None:
     runtime = object.__new__(GroupWorkerRuntime)
-    alpha = _plugin_spec("alpha")
+    alpha = _plugin_spec("alpha", tmp_path)
     runtime.worker_id = "worker-group"
     runtime.plugins = [alpha]
     runtime._plugin_states = [
@@ -241,14 +249,11 @@ async def test_group_worker_start_raises_when_all_plugins_become_inactive() -> N
     assert refresh_snapshots[-1] == []
 
 
-def test_group_worker_initialize_metadata_aggregates_runtime_state() -> None:
-    class _RiskyPlugin:
-        pass
-
-    setattr(_RiskyPlugin, GLOBAL_MCP_RISK_ATTR, True)
-
-    alpha = _plugin_spec("alpha")
-    beta = _plugin_spec("beta")
+def test_group_worker_initialize_metadata_aggregates_runtime_state(
+    tmp_path: Path,
+) -> None:
+    alpha = _plugin_spec("alpha", tmp_path)
+    beta = _plugin_spec("beta", tmp_path)
     alpha_capability = LoadedCapability(
         descriptor=CapabilityDescriptor(
             name="alpha.echo",
@@ -279,7 +284,7 @@ def test_group_worker_initialize_metadata_aggregates_runtime_state() -> None:
             )
         ],
         agents=[alpha_tool],
-        instances=[_RiskyPlugin()],
+        instances=[object()],
     )
     beta_plugin = LoadedPlugin(
         plugin=beta,
@@ -362,4 +367,3 @@ def test_group_worker_initialize_metadata_aggregates_runtime_state() -> None:
             "plugin_id": "alpha",
         }
     ]
-    assert metadata["acknowledge_global_mcp_risk"] is True
