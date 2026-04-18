@@ -11,7 +11,6 @@
 - [LLM 客户端 (ctx.llm)](#llm-客户端)
 - [Memory 客户端 (ctx.memory)](#memory-客户端)
 - [Database 客户端 (ctx.db)](#database-客户端)
-- [Files 客户端 (ctx.files)](#files-客户端)
 - [Platform 客户端 (ctx.platform)](#platform-客户端)
 - [Permission 客户端 (ctx.permission)](#permission-客户端)
 - [Permission 管理客户端 (ctx.permission_manager)](#permission-管理客户端)
@@ -22,7 +21,6 @@
 - [Knowledge Base 客户端 (ctx.kbs / ctx.kb_manager)](#knowledge-base-客户端)
 - [Message History 客户端 (ctx.message_history / ctx.message_history_manager)](#message-history-客户端)
 - [HTTP 客户端 (ctx.http)](#http-客户端)
-- [MCP 客户端 (ctx.mcp / ctx.mcp_manager)](#mcp-客户端)
 - [Metadata 客户端 (ctx.metadata)](#metadata-客户端)
 - [Registry 客户端 (ctx.registry)](#registry-客户端)
 - [Skills 客户端 (ctx.skills)](#skills-客户端)
@@ -53,7 +51,6 @@ class Context:
 ctx.llm: LLMClient                    # LLM 能力客户端
 ctx.memory: MemoryClient              # 记忆能力客户端
 ctx.db: DBClient                      # 数据库客户端
-ctx.files: FileServiceClient          # 文件服务客户端
 ctx.platform: PlatformClient          # 平台客户端
 ctx.permission: PermissionClient      # 权限只读客户端
 ctx.providers: ProviderClient         # Provider 客户端
@@ -65,8 +62,6 @@ ctx.kbs: KnowledgeBaseManagerClient   # 知识库管理客户端
 ctx.message_history: MessageHistoryManagerClient  # 消息历史管理客户端
 ctx.message_history_manager: MessageHistoryManagerClient  # ctx.message_history 的别名
 ctx.http: HTTPClient                  # HTTP 客户端
-ctx.mcp: MCPManagerClient             # MCP 管理客户端
-ctx.mcp_manager: MCPManagerClient     # ctx.mcp 的别名
 ctx.metadata: MetadataClient          # 元数据客户端
 ctx.registry: RegistryClient          # 能力注册客户端
 ctx.skills: SkillClient               # 技能客户端
@@ -360,26 +355,6 @@ await ctx.db.set_many({
 ```python
 async for event in ctx.db.watch("user:"):
     print(event["op"], event["key"])
-```
-
----
-
-## Files 客户端
-
-### register_file()
-
-注册文件并获取令牌。
-
-```python
-token = await ctx.files.register_file("/path/to/file.jpg", timeout=3600)
-```
-
-### handle_file()
-
-通过令牌解析文件路径。
-
-```python
-path = await ctx.files.handle_file(token)
 ```
 
 ---
@@ -869,84 +844,6 @@ await ctx.http.unregister_api("/my_plugin/api")
 apis = await ctx.http.list_apis()
 for api in apis:
     print(f"{api['route']}: {api['methods']}")
-```
-
----
-
-## MCP 客户端
-
-`ctx.mcp` 与 `ctx.mcp_manager` 指向同一个 MCP 管理客户端。它既支持管理本地 MCP 服务，
-也支持注册全局 MCP 服务和临时打开 MCP session。
-
-如果 MCP 服务定义在插件类上且生命周期固定，可以优先用 `@mcp_server(...)` 声明；
-若 `scope="global"`，还必须同时显式标注 `@acknowledge_global_mcp_risk`。
-
-### list_servers() / get_server() / enable_server() / disable_server()
-
-管理本地 MCP 服务。
-
-```python
-servers = await ctx.mcp.list_servers()
-server = await ctx.mcp.get_server("local-devtools")
-
-if server and not server.active:
-    await ctx.mcp.enable_server(server.name)
-```
-
-### wait_until_ready()
-
-等待某个本地 MCP 服务可用。
-
-```python
-ready = await ctx.mcp.wait_until_ready("local-devtools", timeout=10)
-print(ready.name, ready.running)
-```
-
-### session()
-
-临时打开 MCP session，并在退出 `async with` 时自动关闭。
-
-```python
-async with ctx.mcp.session(
-    name="local-devtools",
-    config={"mock_tools": ["inspect"]},
-    timeout=10,
-) as session:
-    tools = await session.list_tools()
-    result = await session.call_tool("inspect", {"target": "project"})
-```
-
-### register_global_server() / list_global_servers() / unregister_global_server()
-
-管理全局 MCP 服务。
-
-```python
-server = await ctx.mcp.register_global_server(
-    "shared-inspector",
-    {"mock_tools": ["inspect"]},
-    timeout=10,
-)
-print(server.name, server.scope)
-
-global_servers = await ctx.mcp.list_global_servers()
-await ctx.mcp.unregister_global_server("shared-inspector")
-```
-
-对应的声明式写法：
-
-```python
-from astrbot_sdk import Star, acknowledge_global_mcp_risk, mcp_server
-
-
-@acknowledge_global_mcp_risk
-@mcp_server(
-    name="shared-inspector",
-    scope="global",
-    config={"mock_tools": ["inspect"]},
-    timeout=10,
-)
-class MCPPlugin(Star):
-    pass
 ```
 
 ---
@@ -1481,10 +1378,6 @@ class MyPlugin(Star):
    - DB: 精确匹配，适合结构化数据
    - MessageHistory: 精确保存原始消息组件、发送者和元数据
 
-6. **声明式优先**：固定的 HTTP 路由、LLM Tool、技能注册、Provider 变更监听、插件级后台任务、MCP 服务，优先考虑对应装饰器；需要运行时动态增删时再使用 `Context` 方法。
+6. **声明式优先**：固定的 HTTP 路由、LLM Tool、技能注册、Provider 变更监听、插件级后台任务，优先考虑对应装饰器；需要运行时动态增删时再使用 `Context` 方法。
 
-7. **文件操作**：使用 `ctx.files` 注册文件令牌，不要直接传递本地路径
-
-8. **平台标识**：使用 UMO（统一消息来源标识）格式：`"platform:instance:session_id"`
-
-9. **MCP 全局服务**：全局 MCP 服务会影响整个运行时，使用声明式 `@mcp_server(scope="global")` 时必须同时显式确认风险。
+7. **平台标识**：使用 UMO（统一消息来源标识）格式：`"platform:instance:session_id"`

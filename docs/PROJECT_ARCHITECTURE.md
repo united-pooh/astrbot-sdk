@@ -59,9 +59,9 @@ AstrBot SDK 是一个基于 Python 3.12+ 的机器人插件开发框架，采用
 │           platforms, group_only, private_only                   │
 │  限流:     rate_limit, cooldown                                 │
 │  能力导出: provide_capability, register_llm_tool,              │
-│           register_agent, http_api, mcp_server, register_skill │
+│           register_agent, http_api, register_skill             │
 │  其他:     priority, validate_config, on_provider_change,      │
-│           background_task, acknowledge_global_mcp_risk          │
+│           background_task                                       │
 │  过滤器:   PlatformFilter, MessageTypeFilter, CustomFilter,    │
 │           all_of, any_of, custom_filter                         │
 │  会话:     MessageSession, session_waiter, SessionController   │
@@ -74,7 +74,7 @@ AstrBot SDK 是一个基于 Python 3.12+ 的机器人插件开发框架，采用
 ├─────────────────────────────────────────────────────────────────┤
 │  能力客户端 (通过 CapabilityProxy → Peer → Transport 调用):    │
 │    LLMClient / MemoryClient / DBClient / PlatformClient        │
-│    HTTPClient / MetadataClient / FileServiceClient             │
+│    HTTPClient / MetadataClient                                 │
 │    以及管理类客户端 (conversation, persona, kb, provider, ...)  │
 └────────────────────┬────────────────────────────────────────────┘
                    │
@@ -297,7 +297,6 @@ HandlerDispatcher 支持参数注入，优先级为：
 | `ctx.platform` | `PlatformClient` | `platform.*` |
 | `ctx.http` | `HTTPClient` | `http.*` |
 | `ctx.metadata` | `MetadataClient` | `metadata.*` |
-| `ctx.files` | `FileServiceClient` | `system.file.*` |
 | `ctx.message_history` | `MessageHistoryManagerClient` | `message_history.*` |
 | `ctx.conversations` | `ConversationManagerClient` | `conversation.*` |
 | `ctx.personas` | `PersonaManagerClient` | `persona.*` |
@@ -306,7 +305,6 @@ HandlerDispatcher 支持参数注入，优先级为：
 | `ctx.provider_manager` | `ProviderManagerClient` | `provider.manager.*` |
 | `ctx.permission` | `PermissionClient` | `permission.*` |
 | `ctx.permission_manager` | `PermissionManagerClient` | `permission.manager.*` |
-| `ctx.mcp` | `MCPManagerClient` | `mcp.*` |
 | `ctx.skills` | `SkillClient` | `skill.*` |
 | `ctx.session_plugins` | `SessionPluginManager` | `session.plugin.*` |
 | `ctx.session_services` | `SessionServiceManager` | `session.service.*` |

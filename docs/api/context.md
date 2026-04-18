@@ -23,7 +23,6 @@ class Context:
     llm: LLMClient                    # LLM 客户端
     memory: MemoryClient              # 记忆客户端
     db: DBClient                      # 数据库客户端
-    files: FileServiceClient          # 文件服务客户端
     platform: PlatformClient          # 平台客户端
     providers: ProviderClient         # Provider 客户端
     provider_manager: ProviderManagerClient  # Provider 管理客户端
@@ -356,34 +355,6 @@ await ctx.db.set_many({
 ```python
 async for event in ctx.db.watch("user:"):
     print(f"{event['op']}: {event['key']}")
-```
-
----
-
-### 4. Files 客户端 (ctx.files)
-
-提供文件令牌注册与解析能力。
-
-```python
-# 类型: FileServiceClient
-```
-
-#### 方法
-
-##### `register_file()`
-
-注册文件并获取令牌。
-
-```python
-token = await ctx.files.register_file("/path/to/file.jpg", timeout=3600)
-```
-
-##### `handle_file()`
-
-通过令牌解析文件路径。
-
-```python
-path = await ctx.files.handle_file(token)
 ```
 
 ---
@@ -1635,11 +1606,9 @@ async def setup_api(event: MessageEvent, ctx: Context):
 
 7. **HTTP 路由**: `ctx.http.register_api()` 会强制要求 route 使用 `/{plugin_id}` 前缀，并校验 `handler_capability` 属于当前插件
 
-8. **文件操作**: 使用 `ctx.files` 注册文件令牌，不要直接传递本地路径
+8. **平台标识**: 使用 UMO（统一消息来源标识）格式：`"platform:instance:session_id"`
 
-9. **平台标识**: 使用 UMO（统一消息来源标识）格式：`"platform:instance:session_id"`
-
-10. **配置访问**: `get_plugin_config()` 只支持查询当前插件自己的配置
+9. **配置访问**: `get_plugin_config()` 只支持查询当前插件自己的配置
 
 ---
 

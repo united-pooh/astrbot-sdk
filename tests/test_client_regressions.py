@@ -6,9 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from astrbot_sdk.clients._proxy import CapabilityProxy
-from astrbot_sdk.clients.files import FileServiceClient
 from astrbot_sdk.clients.memory import MemoryClient
-from astrbot_sdk.clients.mcp import MCPManagerClient
 from astrbot_sdk.clients.metadata import MetadataClient
 from astrbot_sdk.message.session import MessageSession
 
@@ -78,33 +76,6 @@ async def test_metadata_client_rejects_cross_plugin_config_access() -> None:
         await client.get_plugin_config("other-plugin")
 
     assert proxy.calls == []
-
-
-@pytest.mark.asyncio
-async def test_file_service_client_register_variants_share_registration_path() -> None:
-    proxy = _FakeProxy(
-        {"system.file.register": {"token": "token-1", "url": "/api/file/token-1"}}
-    )
-    client = FileServiceClient(proxy)  # type: ignore[arg-type]
-
-    token = await client.register_file("demo.png", timeout=1.5)
-    url = await client.register_file_url("demo.png", timeout=1.5)
-
-    assert token == "token-1"
-    assert url == "/api/file/token-1"
-    assert proxy.calls == [
-        ("system.file.register", {"path": "demo.png", "timeout": 1.5}),
-        ("system.file.register", {"path": "demo.png", "timeout": 1.5}),
-    ]
-
-
-@pytest.mark.asyncio
-async def test_mcp_manager_enable_server_requires_server_payload() -> None:
-    proxy = _FakeProxy({"mcp.local.enable": {}})
-    client = MCPManagerClient(proxy)  # type: ignore[arg-type]
-
-    with pytest.raises(ValueError, match="mcp\\.local\\.enable returned no server"):
-        await client.enable_server("demo")
 
 
 def test_message_session_from_str_rejects_invalid_format() -> None:

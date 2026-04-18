@@ -33,7 +33,6 @@ Turn plugin requirements into working AstrBot SDK plugins. Default to the stable
 | Inter-plugin callable capability | `@provide_capability` |
 | Give the LLM a callable tool | `@register_llm_tool` |
 | Continuous background loop | `@background_task` |
-| MCP server exposure | `@mcp_server` |
 
 Add guards as needed: `@require_admin`, `@platforms(...)`, `@group_only()`, `@private_only()`, `@rate_limit(...)`, `@cooldown(...)`, `@priority(...)`.
 

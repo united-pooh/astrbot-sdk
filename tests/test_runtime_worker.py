@@ -20,7 +20,6 @@ from astrbot_sdk.runtime.loader import (
     PluginSpec,
 )
 from astrbot_sdk.runtime.worker import (
-    GLOBAL_MCP_RISK_ATTR,
     GroupPluginRuntimeState,
     GroupWorkerRuntime,
     PluginWorkerRuntime,
@@ -253,11 +252,6 @@ async def test_group_worker_start_raises_when_all_plugins_become_inactive(
 def test_group_worker_initialize_metadata_aggregates_runtime_state(
     tmp_path: Path,
 ) -> None:
-    class _RiskyPlugin:
-        pass
-
-    setattr(_RiskyPlugin, GLOBAL_MCP_RISK_ATTR, True)
-
     alpha = _plugin_spec("alpha", tmp_path)
     beta = _plugin_spec("beta", tmp_path)
     alpha_capability = LoadedCapability(
@@ -290,7 +284,7 @@ def test_group_worker_initialize_metadata_aggregates_runtime_state(
             )
         ],
         agents=[alpha_tool],
-        instances=[_RiskyPlugin()],
+        instances=[object()],
     )
     beta_plugin = LoadedPlugin(
         plugin=beta,
@@ -373,4 +367,3 @@ def test_group_worker_initialize_metadata_aggregates_runtime_state(
             "plugin_id": "alpha",
         }
     ]
-    assert metadata["acknowledge_global_mcp_risk"] is True

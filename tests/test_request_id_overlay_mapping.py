@@ -48,11 +48,13 @@ class OverlayPlugin(Star):
             f"{','.join(applied or [])}|{','.join(current or []) if current else 'none'}",
         )
 
-    @on_event("llm_request")
-    async def llm_overlay(self, event: MessageEvent) -> None:
-        requested = await event.request_llm()
-        current = await event.should_call_llm()
-        await event.reply(f"{requested}:{current}")
+    @on_event("overlay_check")
+    async def overlay_check(self, event: MessageEvent, ctx: Context) -> None:
+        applied = await ctx.registry.set_handler_whitelist(["overlay"])
+        current = await ctx.registry.get_handler_whitelist()
+        await event.reply(
+            f"{','.join(applied or [])}|{','.join(current or []) if current else 'none'}"
+        )
 """.lstrip(),
         encoding="utf-8",
     )
@@ -101,8 +103,8 @@ async def test_non_message_event_preserves_request_overlay_state(
 
     async with PluginHarness.from_plugin_dir(plugin_dir) as harness:
         payload = harness.build_event_payload(
-            text="trigger llm overlay",
-            event_type="llm_request",
+            text="trigger overlay",
+            event_type="overlay_check",
             request_id="req-llm-1",
         )
 
@@ -110,7 +112,7 @@ async def test_non_message_event_preserves_request_overlay_state(
 
     assert len(records) == 1
     assert records[0].kind == "text"
-    assert records[0].text == "True:True"
+    assert records[0].text == "overlay|overlay"
 
 
 class _RecordingPeer:
@@ -143,20 +145,20 @@ async def test_capability_proxy_keeps_transport_ids_unique_while_forwarding_requ
     )
 
     await asyncio.gather(
-        proxy.call("system.event.llm.get_state", {}),
-        proxy.call("system.event.result.get", {}),
+        proxy.call("system.event.handler_whitelist.get", {}),
+        proxy.call("system.event.handler_whitelist.set", {"plugin_names": ["alpha"]}),
         proxy.call("platform.send", {"session": "test:private:user-1", "text": "hi"}),
     )
 
     assert peer.calls == [
         (
-            "system.event.llm.get_state",
+            "system.event.handler_whitelist.get",
             {"_request_scope_id": "req-parent-1"},
             None,
         ),
         (
-            "system.event.result.get",
-            {"_request_scope_id": "req-parent-1"},
+            "system.event.handler_whitelist.set",
+            {"plugin_names": ["alpha"], "_request_scope_id": "req-parent-1"},
             None,
         ),
         (
