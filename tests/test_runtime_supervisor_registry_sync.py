@@ -102,7 +102,7 @@ version: 1.0.0
 desc: supervisor registry sync tests
 
 runtime:
-  python: "3.12"
+  python: "3.10"
 
 components:
   - class: main:TestPlugin
@@ -121,14 +121,14 @@ components:
         plugin_dir=plugin_dir,
         manifest_path=manifest_path,
         requirements_path=requirements_path,
-        python_version="3.12",
+        python_version="3.10",
         manifest_data={
             "name": plugin_name,
             "author": "tests",
             "version": "1.0.0",
             "desc": "supervisor registry sync tests",
             "components": [{"class": "main:TestPlugin"}],
-            "runtime": {"python": "3.12"},
+            "runtime": {"python": "3.10"},
         },
     )
 
@@ -363,7 +363,7 @@ def test_worker_session_worker_command_includes_wire_codec_for_group_worker(
     beta = _write_plugin_spec(tmp_path, "beta")
     group = EnvironmentGroup(
         id="group-alpha-beta",
-        python_version="3.12",
+        python_version="3.10",
         plugins=[alpha, beta],
         source_path=tmp_path / ".astrbot" / "groups" / "group-alpha-beta" / "src",
         lockfile_path=tmp_path / ".astrbot" / "locks" / "group-alpha-beta.lock",

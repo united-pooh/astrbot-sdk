@@ -61,7 +61,7 @@
 - **项目地址**: https://github.com/AstrBotDevs/AstrBot
 - **SDK 版本**: v4.0
 - **协议版本**: P0.6
-- **Python 要求**: >= 3.12
+- **Python 要求**: >= 3.10
 
 ---
 

@@ -96,7 +96,7 @@ version: 1.0.0
 desc: 我的插件描述
 
 runtime:
-  python: "3.12"
+  python: "3.10"
 
 components:
   - class: main:MyPlugin
@@ -438,7 +438,7 @@ async def test_my_plugin():
 
 - **SDK 版本**: v4.0
 - **最后更新**: 2026-03-22
-- **Python 要求**: >= 3.12
+- **Python 要求**: >= 3.10
 - **协议版本**: P0.6
 
 ---

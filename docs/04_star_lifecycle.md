@@ -278,7 +278,7 @@ repo: https://github.com/user/repo
 logo: logo.png
 
 runtime:
-  python: "3.12"
+  python: "3.10"
 
 components:
   - class: main:MyPlugin

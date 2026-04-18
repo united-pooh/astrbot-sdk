@@ -470,7 +470,7 @@ author: test
 desc: Test plugin
 
 runtime:
-  python: "3.12"
+  python: "3.10"
 
 components:
   - class: main:TestPlugin
@@ -639,7 +639,7 @@ author: test
 desc: Test plugin
 
 runtime:
-  python: "3.12"
+  python: "3.10"
 
 components:
   - class: main:TestPlugin
@@ -675,26 +675,27 @@ on: [push, pull_request]
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.10', '3.11', '3.12', '3.13']
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
-        python-version: '3.12'
+        python-version: ${{ matrix.python-version }}
 
     - name: Install dependencies
       run: |
-        pip install -r requirements.txt
-        pip install -r requirements-dev.txt
+        python -m pip install --upgrade pip
+        pip install -e ".[dev]"
 
     - name: Run tests
       run: |
-        pytest --cov=my_plugin --cov-report=xml
-
-    - name: Upload coverage
-      uses: codecov/codecov-action@v3
+        python -m pytest tests -q
 ```
 
 ---

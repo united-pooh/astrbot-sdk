@@ -18,7 +18,7 @@ def _plugin_spec(
     tmp_path: Path,
     name: str,
     *,
-    python_version: str = "3.12",
+    python_version: str = "3.10",
     requirements: list[str] | None = None,
 ) -> PluginSpec:
     plugin_dir = tmp_path / name
@@ -116,7 +116,7 @@ def test_environment_planner_cleanup_artifacts_removes_stale_entries(
     stale_source.write_text("", encoding="utf-8")
     stale_metadata.write_text("{}", encoding="utf-8")
     stale_lockfile.write_text("", encoding="utf-8")
-    (stale_env / "pyvenv.cfg").write_text("version = 3.12\n", encoding="utf-8")
+    (stale_env / "pyvenv.cfg").write_text("version = 3.10\n", encoding="utf-8")
 
     planner.cleanup_artifacts([active_group])
 

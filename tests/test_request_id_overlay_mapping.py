@@ -22,7 +22,7 @@ version: 1.0.0
 desc: request overlay regression tests
 
 runtime:
-  python: "3.12"
+  python: "3.10"
 
 components:
   - class: main:OverlayPlugin

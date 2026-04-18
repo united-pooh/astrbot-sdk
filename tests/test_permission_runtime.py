@@ -21,7 +21,7 @@ version: 1.0.0
 desc: permission runtime tests
 
 runtime:
-  python: "3.12"
+  python: "3.10"
 
 components:
   - class: main:PermissionRuntimePlugin

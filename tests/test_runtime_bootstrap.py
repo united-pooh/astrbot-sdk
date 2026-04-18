@@ -74,7 +74,7 @@ def _plugin_spec(name: str) -> PluginSpec:
         plugin_dir=plugin_dir,
         manifest_path=plugin_dir / "plugin.yaml",
         requirements_path=plugin_dir / "requirements.txt",
-        python_version="3.12",
+        python_version="3.10",
         manifest_data={"name": name},
     )
 

@@ -39,7 +39,7 @@ def _write_plugin(
             desc: decorator runtime behavior tests
 
             runtime:
-              python: "3.12"
+              python: "3.10"
 
             components:
               - class: main:{class_name}

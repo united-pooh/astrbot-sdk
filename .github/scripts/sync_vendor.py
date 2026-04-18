@@ -5,11 +5,15 @@ from __future__ import annotations
 import shutil
 import subprocess
 import sys
-import tomllib
 from pathlib import Path
 from re import MULTILINE, DOTALL, compile as re_compile
 from textwrap import dedent
 from typing import Any, NoReturn
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - Python 3.10 fallback
+    import tomli as tomllib
 
 
 VENDOR_README = dedent(
