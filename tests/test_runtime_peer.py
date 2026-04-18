@@ -270,6 +270,57 @@ async def test_initialize_and_codec_and_mismatch_fails_fast(
 
 
 @pytest.mark.asyncio
+async def test_initialize_send_failure_cleans_pending_results(
+    wire_codec: ProtocolCodec,
+) -> None:
+    transport = _FailingSendTransport()
+    peer = _make_peer(transport, wire_codec=wire_codec)
+
+    await peer.start()
+    try:
+        with pytest.raises(RuntimeError, match="send failed"):
+            await peer.initialize([])
+
+        assert peer._pending_results == {}
+    finally:
+        await _stop_peer(peer)
+
+
+@pytest.mark.asyncio
+async def test_invoke_send_failure_cleans_pending_results(
+    wire_codec: ProtocolCodec,
+) -> None:
+    transport = _FailingSendTransport()
+    peer = _make_peer(transport, wire_codec=wire_codec)
+
+    await peer.start()
+    try:
+        with pytest.raises(RuntimeError, match="send failed"):
+            await peer.invoke("alpha.echo", {})
+
+        assert peer._pending_results == {}
+    finally:
+        await _stop_peer(peer)
+
+
+@pytest.mark.asyncio
+async def test_invoke_stream_send_failure_cleans_pending_streams(
+    wire_codec: ProtocolCodec,
+) -> None:
+    transport = _FailingSendTransport()
+    peer = _make_peer(transport, wire_codec=wire_codec)
+
+    await peer.start()
+    try:
+        with pytest.raises(RuntimeError, match="send failed"):
+            await peer.invoke_stream("alpha.stream", {})
+
+        assert peer._pending_streams == {}
+    finally:
+        await _stop_peer(peer)
+
+
+@pytest.mark.asyncio
 async def test_wait_until_remote_initialized_fails_when_transport_closes_pre_init(
     wire_codec: ProtocolCodec,
 ) -> None:
