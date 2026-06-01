@@ -7,11 +7,12 @@ import pytest
 
 from astrbot_sdk.runtime.environment_groups import (
     EnvironmentGroup,
+    EnvironmentPlanResult,
     EnvironmentPlanner,
     GROUP_STATE_FILE_NAME,
     GroupEnvironmentManager,
 )
-from astrbot_sdk.runtime.loader import PluginSpec
+from astrbot_sdk.runtime.loader import PluginEnvironmentManager, PluginSpec
 
 
 def _plugin_spec(
@@ -208,3 +209,61 @@ def test_group_environment_manager_prepare_syncs_existing_env_when_state_changed
     assert calls == ["sync:alpha"]
     updated_state = json.loads(state_path.read_text(encoding="utf-8"))
     assert updated_state["environment_fingerprint"] == "new-fingerprint"
+
+
+def test_group_environment_manager_prepare_rebuilds_when_state_is_corrupt(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    plugin = _plugin_spec(tmp_path, "alpha")
+    group = _group(tmp_path, plugin)
+    group.venv_path.mkdir(parents=True, exist_ok=True)
+    group.lockfile_path.parent.mkdir(parents=True, exist_ok=True)
+    group.lockfile_path.write_text("# lock\n", encoding="utf-8")
+    group.python_path.parent.mkdir(parents=True, exist_ok=True)
+    group.python_path.write_text("", encoding="utf-8")
+    (group.venv_path / "pyvenv.cfg").write_text("version = 3.10.9\n", encoding="utf-8")
+    state_path = group.venv_path / GROUP_STATE_FILE_NAME
+    state_path.write_text("{not-json", encoding="utf-8")
+    manager = GroupEnvironmentManager(tmp_path, uv_binary="uv")
+    calls: list[str] = []
+
+    monkeypatch.setattr(
+        manager,
+        "_rebuild",
+        lambda current_group: calls.append(f"rebuild:{current_group.id}"),
+    )
+    monkeypatch.setattr(
+        manager,
+        "_sync_existing",
+        lambda current_group: calls.append(f"sync:{current_group.id}"),
+    )
+
+    assert manager.prepare(group) == group.python_path
+
+    assert calls == ["rebuild:alpha"]
+    updated_state = json.loads(state_path.read_text(encoding="utf-8"))
+    assert updated_state["environment_fingerprint"] == "fingerprint"
+
+
+def test_plugin_environment_manager_prepare_environment_raises_skipped_reason(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    plugin = _plugin_spec(tmp_path, "alpha")
+    manager = PluginEnvironmentManager(tmp_path, uv_binary="uv")
+    manager._plan_result = EnvironmentPlanResult(
+        plugins=[],
+        plugin_to_group={},
+        skipped_plugins={"alpha": "dependency conflict"},
+    )
+    monkeypatch.setattr(
+        manager,
+        "plan",
+        lambda _plugins: pytest.fail(
+            "prepare_environment should not replan an already skipped plugin"
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="dependency conflict"):
+        manager.prepare_environment(plugin)
