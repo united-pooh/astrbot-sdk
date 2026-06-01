@@ -563,6 +563,7 @@ class GroupEnvironmentManager:
             not group.python_path.exists()
             or not self._matches_python_version(group.venv_path, group.python_version)
             or not group.lockfile_path.exists()
+            or state is None
         ):
             self._rebuild(group)
             self._write_state(state_path, group)
@@ -639,14 +640,14 @@ class GroupEnvironmentManager:
         return _read_pyvenv_major_minor(venv_path / "pyvenv.cfg") == version
 
     @staticmethod
-    def _load_state(state_path: Path) -> dict[str, object]:
+    def _load_state(state_path: Path) -> dict[str, object] | None:
         if not state_path.exists():
             return {}
         try:
             data = json.loads(state_path.read_text(encoding="utf-8"))
-        except Exception:
-            return {}
-        return data if isinstance(data, dict) else {}
+        except (json.JSONDecodeError, OSError):
+            return None
+        return data if isinstance(data, dict) else None
 
     @staticmethod
     def _write_state(state_path: Path, group: EnvironmentGroup) -> None:

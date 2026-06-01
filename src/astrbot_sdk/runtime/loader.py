@@ -977,6 +977,10 @@ class PluginEnvironmentManager:
             self._plan_result is None
             or plugin.name not in self._plan_result.plugin_to_group
         ):
+            if self._plan_result is not None:
+                reason = self._plan_result.skipped_plugins.get(plugin.name)
+                if reason is not None:
+                    raise RuntimeError(reason)
             planned_plugins = (
                 list(self._plan_result.plugins) if self._plan_result else []
             )
