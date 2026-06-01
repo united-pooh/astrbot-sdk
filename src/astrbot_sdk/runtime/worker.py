@@ -16,11 +16,12 @@
 启动流程：
     Worker 启动:
         1. load_plugin_spec() 加载插件规范
-        2. load_plugin() 加载插件组件
-        3. 创建 Peer 并设置处理器
-        4. 向 Supervisor 发送 initialize
-        5. 等待 Supervisor 的 initialize_result
-        6. 执行 on_start 生命周期回调
+        2. validate_plugin_spec() 校验插件清单
+        3. load_plugin() 加载插件组件
+        4. 创建 Peer 并设置处理器
+        5. 向 Supervisor 发送 initialize
+        6. 等待 Supervisor 的 initialize_result
+        7. 执行 on_start 生命周期回调
 """
 
 from __future__ import annotations
@@ -45,6 +46,7 @@ from .loader import (
     load_plugin,
     load_plugin_config,
     load_plugin_spec,
+    validate_plugin_spec,
 )
 from .peer import Peer
 
@@ -62,6 +64,13 @@ class GroupPluginRuntimeState:
     plugin: PluginSpec
     loaded_plugin: LoadedPlugin
     lifecycle_context: RuntimeContext
+
+
+def _load_validated_plugin_spec(plugin_dir: Path) -> PluginSpec:
+    """加载并校验插件清单，避免 direct worker 路径绕过发现阶段约束。"""
+    plugin = load_plugin_spec(plugin_dir)
+    validate_plugin_spec(plugin)
+    return plugin
 
 
 def _load_group_plugin_specs(group_metadata_path: Path) -> tuple[str, list[PluginSpec]]:
@@ -92,7 +101,7 @@ def _load_group_plugin_specs(group_metadata_path: Path) -> tuple[str, list[Plugi
             raise RuntimeError(
                 f"worker group metadata contains invalid plugin_dir: {group_metadata_path}"
             )
-        plugins.append(load_plugin_spec(Path(plugin_dir)))
+        plugins.append(_load_validated_plugin_spec(Path(plugin_dir)))
 
     group_id = payload.get("group_id")
     if not isinstance(group_id, str) or not group_id:
@@ -103,7 +112,7 @@ def _load_group_plugin_specs(group_metadata_path: Path) -> tuple[str, list[Plugi
 def _load_plugin_specs(plugin_dirs: list[Path]) -> list[PluginSpec]:
     if not plugin_dirs:
         raise RuntimeError("worker requires at least one plugin directory")
-    return [load_plugin_spec(plugin_dir) for plugin_dir in plugin_dirs]
+    return [_load_validated_plugin_spec(plugin_dir) for plugin_dir in plugin_dirs]
 
 
 def _build_worker_registry_entry(
@@ -422,7 +431,7 @@ class PluginWorkerRuntime:
         worker_id: str | None = None,
         wire_codec: ProtocolCodec | None = None,
     ) -> None:
-        self.plugin = load_plugin_spec(plugin_dir)
+        self.plugin = _load_validated_plugin_spec(plugin_dir)
         self.worker_id = str(worker_id or self.plugin.name)
         self.transport = transport
         self.wire_codec = wire_codec or MsgpackProtocolCodec()
