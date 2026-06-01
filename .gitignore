@@ -50,6 +50,12 @@ plugins/.venv/
 .uv-cache/
 .astrbot/
 .codex-local/
+.claude/
+
+# Multi-agent pipeline artifacts
+.pipeline-workspace/
+.pipeline-workspace/**
+.pipeline-last-run-summary.json
 
 # IDE files
 .idea/
