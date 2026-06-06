@@ -297,6 +297,8 @@ from astrbot_sdk.decorators import provide_capability
 当前实现会强制要求 route 使用 `/{plugin_id}` 或 `/{plugin_id}/...`，并校验
 `handler_capability` 必须属于当前插件。`unregister_api(route)` 在不传 `methods`
 时会移除当前插件在该 route 下注册的全部方法。
+同一插件重复注册相同 route 和 method 时，新的 handler 会替换该 method 的旧 handler；
+未重叠的 method 会保留原有注册。
 
 #### register_api()
 
@@ -510,6 +512,6 @@ async def setup_api(event: MessageEvent, ctx: Context):
 2. 远程调用可能失败，建议使用 try-except
 3. `Memory` 适合语义检索，`DB` 适合结构化 KV，`MessageHistory` 适合精确保存原始消息记录
 4. `DBClient` 的 key 对插件隔离；`list()` 返回的 key 仍是插件本地视图；`ctx.db.watch()` 在当前 Core bridge MVP 暂不支持
-5. `HTTPClient.register_api()` 会强制要求 route 使用 `/{plugin_id}` 前缀，并校验 `handler_capability` 归属当前插件；`unregister_api(route)` 默认移除该 route 下全部方法
+5. `HTTPClient.register_api()` 会强制要求 route 使用 `/{plugin_id}` 前缀，并校验 `handler_capability` 归属当前插件；重复注册相同 route/method 会替换旧 handler；`unregister_api(route)` 默认移除该 route 下全部方法
 6. 文件操作使用 file service 注册令牌
 7. 平台会话标识使用 `MessageSession` 字符串格式：`"platform_id:message_type:session_id"`，例如 `mock-platform:private:user-42` 或 `mock-platform:group:room-7`

@@ -29,6 +29,177 @@ async def _call(
 
 
 @pytest.mark.asyncio
+async def test_http_register_rejects_empty_method_list(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    router = CapabilityRouter()
+
+    with pytest.raises(AstrBotError) as exc_info:
+        await _call(
+            router,
+            "http.register_api",
+            {
+                "route": "/test-plugin/demo",
+                "methods": [],
+                "handler_capability": "test-plugin.handler",
+                "description": "demo",
+            },
+        )
+
+    assert exc_info.value.code == "invalid_input"
+
+
+@pytest.mark.asyncio
+async def test_http_register_rejects_methods_empty_after_trimming(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    router = CapabilityRouter()
+
+    with pytest.raises(AstrBotError) as exc_info:
+        await _call(
+            router,
+            "http.register_api",
+            {
+                "route": "/test-plugin/demo",
+                "methods": ["", " ", "\t"],
+                "handler_capability": "test-plugin.handler",
+                "description": "demo",
+            },
+        )
+
+    assert exc_info.value.code == "invalid_input"
+
+
+@pytest.mark.asyncio
+async def test_http_register_canonicalizes_methods(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    router = CapabilityRouter()
+
+    await _call(
+        router,
+        "http.register_api",
+        {
+            "route": "/test-plugin/demo",
+            "methods": ["get", " POST ", "GET"],
+            "handler_capability": "test-plugin.handler",
+            "description": "demo",
+        },
+    )
+
+    listed = await _call(router, "http.list_apis", {})
+
+    assert listed == {
+        "apis": [
+            {
+                "route": "/test-plugin/demo",
+                "methods": ["GET", "POST"],
+                "handler_capability": "test-plugin.handler",
+                "description": "demo",
+                "plugin_id": "test-plugin",
+            }
+        ]
+    }
+
+
+@pytest.mark.asyncio
+async def test_http_duplicate_route_replaces_overlapping_methods_only(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    router = CapabilityRouter()
+
+    await _call(
+        router,
+        "http.register_api",
+        {
+            "route": "/test-plugin/demo",
+            "methods": ["GET", "POST"],
+            "handler_capability": "test-plugin.old",
+            "description": "old",
+        },
+    )
+    await _call(
+        router,
+        "http.register_api",
+        {
+            "route": "/test-plugin/other",
+            "methods": ["PATCH"],
+            "handler_capability": "test-plugin.other",
+            "description": "other route",
+        },
+    )
+    await _call(
+        router,
+        "http.register_api",
+        {
+            "route": "/other-plugin/demo",
+            "methods": ["POST"],
+            "handler_capability": "other-plugin.handler",
+            "description": "other plugin",
+        },
+        plugin_id="other-plugin",
+    )
+    await _call(
+        router,
+        "http.register_api",
+        {
+            "route": "/test-plugin/demo",
+            "methods": ["post", "DELETE"],
+            "handler_capability": "test-plugin.new",
+            "description": "new",
+        },
+    )
+
+    listed = await _call(router, "http.list_apis", {})
+    other_listed = await _call(router, "http.list_apis", {}, plugin_id="other-plugin")
+
+    assert listed == {
+        "apis": [
+            {
+                "route": "/test-plugin/demo",
+                "methods": ["GET"],
+                "handler_capability": "test-plugin.old",
+                "description": "old",
+                "plugin_id": "test-plugin",
+            },
+            {
+                "route": "/test-plugin/other",
+                "methods": ["PATCH"],
+                "handler_capability": "test-plugin.other",
+                "description": "other route",
+                "plugin_id": "test-plugin",
+            },
+            {
+                "route": "/test-plugin/demo",
+                "methods": ["DELETE", "POST"],
+                "handler_capability": "test-plugin.new",
+                "description": "new",
+                "plugin_id": "test-plugin",
+            },
+        ]
+    }
+    assert other_listed == {
+        "apis": [
+            {
+                "route": "/other-plugin/demo",
+                "methods": ["POST"],
+                "handler_capability": "other-plugin.handler",
+                "description": "other plugin",
+                "plugin_id": "other-plugin",
+            }
+        ]
+    }
+
+
+@pytest.mark.asyncio
 async def test_http_unregister_empty_methods_removes_all_for_route(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

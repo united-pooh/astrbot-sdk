@@ -779,6 +779,8 @@ await ctx.message_history.delete_all(session)
 `ctx.http.register_api()` 会强制要求 route 使用 `/{plugin_id}` 或 `/{plugin_id}/...`，
 并校验 `handler_capability` 必须属于当前插件。`ctx.http.unregister_api(route)` 在不传
 `methods` 时会移除当前插件在该路由下注册的全部方法。
+同一插件重复注册相同 route 和 method 时，新的 handler 会替换该 method 的旧 handler；
+未重叠的 method 会保留原有注册。
 
 如果路由和 handler 在插件定义阶段就固定了，优先考虑使用
 `@http_api(...) + @provide_capability(...)` 的声明式写法。它会在插件启动时自动注册，

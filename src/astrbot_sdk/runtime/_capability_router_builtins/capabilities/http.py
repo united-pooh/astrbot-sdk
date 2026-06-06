@@ -84,7 +84,14 @@ class HttpCapabilityMixin(CapabilityRouterBridgeBase):
         plugin_name = self._require_caller_plugin_id("http.register_api")
         _validate_plugin_route_namespace(route, plugin_name)
         _validate_handler_capability_namespace(handler_capability, plugin_name)
-        methods = sorted({method.upper() for method in methods_payload if method})
+        methods = sorted(
+            {method.strip().upper() for method in methods_payload if method.strip()}
+        )
+        if not methods:
+            raise AstrBotError.invalid_input(
+                "http.register_api 的 methods 至少需要包含一个非空 HTTP method"
+            )
+        method_set = set(methods)
         entry: dict[str, Any] = {
             "route": route,
             "methods": methods,
@@ -92,15 +99,17 @@ class HttpCapabilityMixin(CapabilityRouterBridgeBase):
             "description": str(payload.get("description", "")),
             "plugin_id": plugin_name,
         }
-        self.http_api_store = [
-            item
-            for item in self.http_api_store
-            if not (
-                item.get("route") == route
-                and item.get("plugin_id") == entry["plugin_id"]
-                and item.get("methods") == methods
-            )
-        ]
+        updated: list[dict[str, Any]] = []
+        for item in self.http_api_store:
+            if item.get("route") != route or item.get("plugin_id") != plugin_name:
+                updated.append(item)
+                continue
+            remaining_methods = [
+                method for method in item.get("methods", []) if method not in method_set
+            ]
+            if remaining_methods:
+                updated.append({**item, "methods": remaining_methods})
+        self.http_api_store = updated
         self.http_api_store.append(entry)
         return {}
 

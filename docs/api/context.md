@@ -819,6 +819,8 @@ await ctx.message_history.delete_all(session)
 当前实现会强制要求 route 使用 `/{plugin_id}` 或 `/{plugin_id}/...`，并校验
 `handler_capability` 必须属于当前插件。`unregister_api(route)` 在不传 `methods`
 时会移除当前插件在该 route 下注册的全部方法。
+同一插件重复注册相同 route 和 method 时，新的 handler 会替换该 method 的旧 handler；
+未重叠的 method 会保留原有注册。
 
 #### 方法
 
@@ -1604,7 +1606,7 @@ async def setup_api(event: MessageEvent, ctx: Context):
 
 6. **DB 作用域**: `ctx.db` 的 key 会自动限制在当前插件命名空间中
 
-7. **HTTP 路由**: `ctx.http.register_api()` 会强制要求 route 使用 `/{plugin_id}` 前缀，并校验 `handler_capability` 属于当前插件
+7. **HTTP 路由**: `ctx.http.register_api()` 会强制要求 route 使用 `/{plugin_id}` 前缀，并校验 `handler_capability` 属于当前插件；重复注册相同 route/method 会替换旧 handler
 
 8. **平台标识**: 使用 UMO（统一消息来源标识）格式：`"platform:instance:session_id"`
 
