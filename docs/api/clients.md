@@ -733,6 +733,9 @@ from astrbot_sdk.clients import HTTPClient
 - `methods` (`list[str] | None`): HTTP 方法列表
 - `description` (`str`): API 描述
 
+同一插件重复注册相同 route 和 method 时，新的 handler 会替换该 method 的旧 handler；
+未重叠的 method 会保留原有注册。
+
 **示例**:
 
 ```python
@@ -1746,7 +1749,7 @@ async def handle_message(event: MessageEvent, ctx: Context):
 2. 远程调用可能失败，建议使用 try-except 处理
 3. Memory 适合语义搜索，DB 适合结构化 KV，MessageHistory 适合精确保存原始消息记录
 4. DB key 在运行时按插件隔离；`list()` 和 `watch()` 返回插件本地 key 视图
-5. `HTTPClient.register_api()` 会强制要求 route 使用 `/{plugin_id}` 前缀，并校验 `handler_capability` 归属当前插件；`unregister_api(route)` 默认移除该 route 下全部方法
+5. `HTTPClient.register_api()` 会强制要求 route 使用 `/{plugin_id}` 前缀，并校验 `handler_capability` 归属当前插件；重复注册相同 route/method 会替换旧 handler；`unregister_api(route)` 默认移除该 route 下全部方法
 6. 文件操作使用 file service 注册令牌
 7. 平台标识使用 UMO 格式：`"platform:instance:session_id"`
 
