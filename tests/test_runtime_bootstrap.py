@@ -744,6 +744,7 @@ def test_plugin_and_group_worker_runtime_default_codec_use_msgpack_peer(
             plugin_dir=plugin_dir,
         ),
     )
+    monkeypatch.setattr(worker_module, "validate_plugin_spec", lambda plugin: None)
     monkeypatch.setattr(
         worker_module,
         "load_plugin",
@@ -807,6 +808,7 @@ def test_plugin_and_group_worker_runtime_explicit_json_codec_use_json_peer(
             plugin_dir=plugin_dir,
         ),
     )
+    monkeypatch.setattr(worker_module, "validate_plugin_spec", lambda plugin: None)
     monkeypatch.setattr(
         worker_module,
         "load_plugin",

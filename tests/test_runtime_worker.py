@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -24,6 +25,7 @@ from astrbot_sdk.runtime.worker import (
     GroupWorkerRuntime,
     PluginWorkerRuntime,
 )
+import astrbot_sdk.runtime.worker as worker_module
 
 
 def _plugin_spec(name: str, tmp_path: Path | None = None) -> PluginSpec:
@@ -39,6 +41,92 @@ def _plugin_spec(name: str, tmp_path: Path | None = None) -> PluginSpec:
         python_version="3.10",
         manifest_data={"name": name},
     )
+
+
+def _write_worker_plugin_dir(
+    plugin_dir: Path,
+    *,
+    include_author: bool = True,
+    include_repo: bool = True,
+) -> None:
+    lines = [
+        "name: worker_manifest_plugin",
+        'runtime: {"python": "3.10"}',
+        "components:",
+        "  - class: main:WorkerTestPlugin",
+    ]
+    if include_author:
+        lines.append("author: tests")
+    if include_repo:
+        lines.append("repo: united-pooh/astrbot-sdk")
+    plugin_dir.mkdir(parents=True, exist_ok=True)
+    (plugin_dir / "plugin.yaml").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    (plugin_dir / "requirements.txt").write_text("", encoding="utf-8")
+    (plugin_dir / "main.py").write_text(
+        "from astrbot_sdk import Star\n\nclass WorkerTestPlugin(Star):\n    pass\n",
+        encoding="utf-8",
+    )
+
+
+def _fail_if_plugin_code_loads(_plugin: PluginSpec) -> LoadedPlugin:
+    pytest.fail("direct worker should validate plugin.yaml before loading plugin code")
+
+
+def test_plugin_worker_runtime_validates_manifest_before_loading_code(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    plugin_dir = tmp_path / "missing_author"
+    _write_worker_plugin_dir(plugin_dir, include_author=False)
+    monkeypatch.setattr(worker_module, "load_plugin", _fail_if_plugin_code_loads)
+
+    with pytest.raises(ValueError, match="缺少 author"):
+        PluginWorkerRuntime(plugin_dir=plugin_dir, transport=SimpleNamespace())
+
+
+def test_group_worker_runtime_validates_plugin_dirs_before_loading_code(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    plugin_dir = tmp_path / "missing_repo"
+    _write_worker_plugin_dir(plugin_dir, include_repo=False)
+    monkeypatch.setattr(worker_module, "load_plugin", _fail_if_plugin_code_loads)
+
+    with pytest.raises(ValueError, match="缺少 repo"):
+        GroupWorkerRuntime(
+            transport=SimpleNamespace(),
+            plugin_dirs=[plugin_dir],
+        )
+
+
+def test_group_worker_runtime_validates_group_metadata_before_loading_code(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    plugin_dir = tmp_path / "missing_repo"
+    _write_worker_plugin_dir(plugin_dir, include_repo=False)
+    metadata_path = tmp_path / "group.json"
+    metadata_path.write_text(
+        json.dumps(
+            {
+                "group_id": "invalid-group",
+                "plugin_entries": [
+                    {
+                        "name": "worker_manifest_plugin",
+                        "plugin_dir": str(plugin_dir),
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(worker_module, "load_plugin", _fail_if_plugin_code_loads)
+
+    with pytest.raises(ValueError, match="缺少 repo"):
+        GroupWorkerRuntime(
+            transport=SimpleNamespace(),
+            group_metadata_path=metadata_path,
+        )
 
 
 @pytest.mark.asyncio
